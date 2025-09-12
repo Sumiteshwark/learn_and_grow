@@ -1,717 +1,1847 @@
-# 🚀 **BullMQ Implementation in Sentinel - Complete Technical Guide**
+# 🚀 **BullMQ Complete Technical Guide**
+
+## 📖 **Theory & Concepts**
+
+### **Background Theory**
+
+#### **What is a Job Queue?**
+A **job queue** is a data structure that manages units of work (jobs) in a First-In-First-Out (FIFO) manner, but with advanced features like prioritization, scheduling, and distributed processing. Job queues enable:
+
+- **Asynchronous Processing**: Decouple task submission from execution
+- **Scalability**: Distribute work across multiple workers
+- **Reliability**: Persist jobs across system failures
+- **Load Balancing**: Distribute work based on capacity
+
+#### **Why Redis for Job Queues?**
+Redis provides the perfect foundation for job queues due to its:
+
+- **In-Memory Storage**: Sub-millisecond access times
+- **Persistence**: Data survives server restarts (RDB/AOF)
+- **Atomic Operations**: Thread-safe operations
+- **Pub/Sub**: Real-time event notifications
+- **Data Structures**: Lists, Sets, Sorted Sets, Hashes
+- **Clustering**: Horizontal scaling and high availability
+
+#### **Distributed Systems Principles**
+BullMQ implements several distributed systems patterns:
+
+- **Producer-Consumer Pattern**: Producers add jobs, consumers process them
+- **Leader Election**: Workers compete for jobs using Redis locks
+- **Circuit Breaker**: Automatic failure handling and recovery
+- **Event Sourcing**: Complete audit trail of job state changes
+- **Saga Pattern**: Complex workflows with compensation logic
+
+---
+
+### **Core Terminology**
+
+#### **1. Queue**
+```typescript
+// Primary container for jobs
+const queue = new Queue('email-queue', { connection: redisConfig });
+```
+- **Definition**: A named collection of jobs waiting to be processed
+- **Purpose**: Organizes jobs by type and processing requirements
+- **Characteristics**: FIFO with priority support, persistent storage
+
+#### **2. Job**
+```typescript
+// Unit of work
+const job = await queue.add('send-email', {
+  to: 'user@example.com',
+  subject: 'Welcome!'
+});
+```
+- **Definition**: A single unit of work with data, options, and metadata
+- **Components**:
+  - **Data**: Payload containing job-specific information
+  - **Options**: Configuration (priority, retries, scheduling)
+  - **Metadata**: System-generated info (ID, timestamps, attempts)
+
+#### **3. Worker**
+```typescript
+// Job processor
+const worker = new Worker('email-queue', async (job) => {
+  return await sendEmail(job.data);
+});
+```
+- **Definition**: A process that consumes and executes jobs from queues
+- **Responsibilities**: Job execution, progress reporting, error handling
+- **Characteristics**: Concurrent processing, automatic scaling
+
+#### **4. Producer**
+```typescript
+// Job creator
+await queue.add('process-file', fileData);
+```
+- **Definition**: Any application component that creates jobs
+- **Examples**: API endpoints, scheduled tasks, event handlers
+- **Role**: Initiates work without blocking execution
+
+#### **5. Consumer**
+```typescript
+// Job processor (same as Worker)
+const consumer = new Worker('queue-name', processor);
+```
+- **Definition**: Component that receives and processes jobs
+- **Pattern**: Pull-based consumption from queues
+- **Scaling**: Multiple consumers can process same queue
+
+---
+
+### **Job Lifecycle States**
+
+#### **Complete State Flow:**
+```
+CREATED → WAITING → ACTIVE → [COMPLETED | FAILED | DELAYED]
+    ↑       ↑         ↑            ↓
+    └───────┴─────────┴─────────── RETRY
+```
+
+#### **State Definitions:**
+
+**1. WAITING** (Initial State)
+```typescript
+// Job created and queued for processing
+await queue.add('task', data); // Job enters WAITING state
+```
+- **Characteristics**: Job stored in Redis, waiting for worker
+- **Transitions**: → ACTIVE (when worker picks up job)
+- **Storage**: Redis sorted set ordered by priority
+
+**2. ACTIVE** (Processing State)
+```typescript
+// Worker processing the job
+const worker = new Worker('queue', async (job) => {
+  // Job is now ACTIVE
+  await processJob(job);
+});
+```
+- **Characteristics**: Job locked by worker, being executed
+- **Time Limits**: Lock duration prevents duplicate processing
+- **Progress**: Can report progress updates
+
+**3. COMPLETED** (Success State)
+```typescript
+// Job finished successfully
+return { success: true, result: data }; // Job moves to COMPLETED
+```
+- **Characteristics**: Job finished without errors
+- **Retention**: Configurable retention period
+- **Cleanup**: Automatic removal after retention period
+
+**4. FAILED** (Error State)
+```typescript
+// Job failed during processing
+throw new Error('Processing failed'); // Job moves to FAILED
+```
+- **Characteristics**: Job encountered an error
+- **Retry Logic**: May retry based on configuration
+- **Dead Letter**: Moves to DLQ if max retries exceeded
+
+**5. DELAYED** (Scheduled State)
+```typescript
+// Job scheduled for future execution
+await queue.add('task', data, { delay: 60000 }); // 1 minute delay
+```
+- **Characteristics**: Job waits until scheduled time
+- **Storage**: Redis sorted set ordered by execution time
+
+**6. PAUSED** (Suspended State)
+```typescript
+// Queue temporarily stopped
+await queue.pause(); // All jobs enter PAUSED state
+```
+- **Characteristics**: Queue processing suspended
+- **Recovery**: Jobs resume when queue is unpaused
+
+---
+
+### **Advanced Concepts**
+
+#### **1. Priority Queues**
+```typescript
+// Jobs processed in priority order (higher number = higher priority)
+await queue.add('urgent', data, { priority: 10 });    // Highest
+await queue.add('normal', data, { priority: 5 });     // Medium
+await queue.add('background', data, { priority: 1 }); // Lowest
+```
+- **Mechanism**: Redis sorted sets with priority scoring
+- **Use Cases**: Critical tasks, user-facing vs background work
+- **Performance**: Slight overhead for priority ordering
+
+#### **2. Job Dependencies**
+```typescript
+// Job B waits for Job A completion
+const jobA = await queue.add('step1', dataA);
+const jobB = await queue.add('step2', dataB, {
+  parent: { id: jobA.id, queue: 'my-queue' }
+});
+```
+- **Types**:
+  - **Parent-Child**: Child waits for parent completion
+  - **Multi-Parent**: Child waits for multiple parents
+- **Use Cases**: Complex workflows, data pipelines
+
+#### **3. Recurring Jobs**
+```typescript
+// Cron-based repetition
+await queue.add('daily-report', data, {
+  repeat: { cron: '0 9 * * *' } // Every day at 9 AM
+});
+
+// Interval-based repetition
+await queue.add('health-check', data, {
+  repeat: { every: 30000 } // Every 30 seconds
+});
+```
+- **Storage**: Separate Redis structures for scheduling
+- **Execution**: Automatic job creation at scheduled times
+
+#### **4. Dead Letter Queues (DLQ)**
+```typescript
+// Failed jobs moved to DLQ after max retries
+const dlq = new Queue('dead-letter-queue');
+await dlq.add('failed-job', {
+  originalJobId: job.id,
+  error: error.message,
+  failedAt: new Date()
+});
+```
+- **Purpose**: Store permanently failed jobs for inspection
+- **Recovery**: Manual reprocessing or analysis
+- **Retention**: Configurable cleanup policies
+
+#### **5. Rate Limiting**
+```typescript
+// Limit job processing rate
+const worker = new Worker('api-calls', processor, {
+  limiter: {
+    max: 100,     // Max jobs
+    duration: 1000 // Per second
+  }
+});
+```
+- **Types**:
+  - **Worker-Level**: Per worker instance
+  - **Queue-Level**: Global rate limiting
+- **Use Cases**: API rate limiting, resource protection
+
+#### **6. Job Locking**
+```typescript
+// Prevent duplicate processing
+const worker = new Worker('queue', processor, {
+  lockDuration: 30000,    // 30 second lock
+  lockRenewTime: 15000    // Renew every 15 seconds
+});
+```
+- **Mechanism**: Redis-based distributed locks
+- **Purpose**: Prevent race conditions and duplicate processing
+- **Recovery**: Stalled job detection and recovery
+
+#### **7. Progress Tracking**
+```typescript
+// Report job progress
+const worker = new Worker('file-upload', async (job) => {
+  job.updateProgress(25, { status: 'Uploading' });
+  await uploadChunk(chunk1);
+
+  job.updateProgress(50, { status: 'Processing' });
+  await processFile();
+
+  job.updateProgress(100, { status: 'Complete' });
+  return result;
+});
+```
+- **Real-time**: Progress updates via Redis pub/sub
+- **Granular**: Support for step-by-step tracking
+- **Persistence**: Progress stored with job state
+
+#### **8. Batch Processing**
+```typescript
+// Process multiple jobs together
+const jobs = await queue.addBulk([
+  { name: 'email', data: user1Data },
+  { name: 'email', data: user2Data },
+  { name: 'email', data: user3Data }
+]);
+```
+- **Efficiency**: Reduce Redis round trips
+- **Atomicity**: All-or-nothing job creation
+- **Use Cases**: Bulk operations, newsletters
+
+---
+
+### **Architecture Patterns**
+
+#### **1. Producer-Consumer Pattern**
+```
+Producers → Queue → Consumers
+    ↓         ↓         ↓
+   API     Storage    Workers
+```
+- **Decoupling**: Producers and consumers operate independently
+- **Scalability**: Scale producers and consumers separately
+- **Reliability**: Queue acts as buffer during failures
+
+#### **2. Competing Consumers Pattern**
+```
+Queue → Worker 1
+      → Worker 2
+      → Worker 3
+```
+- **Load Distribution**: Jobs distributed across multiple workers
+- **Fault Tolerance**: Workers can fail without affecting others
+- **Scalability**: Add more workers to handle increased load
+
+#### **3. Saga Pattern (Complex Workflows)**
+```
+Job A → Job B → Job C
+   ↓       ↓       ↓
+Error → Compensation → Rollback
+```
+- **Long-Running**: Complex multi-step processes
+- **Compensation**: Rollback logic for failures
+- **State Management**: Track progress across steps
+
+#### **4. Circuit Breaker Pattern**
+```typescript
+// Automatic failure handling
+const worker = new Worker('external-api', async (job) => {
+  if (await isCircuitOpen()) {
+    throw new Error('Circuit breaker open');
+  }
+
+  try {
+    return await callExternalAPI(job.data);
+  } catch (error) {
+    await recordFailure();
+    throw error;
+  }
+});
+```
+- **Purpose**: Prevent cascade failures
+- **States**: Closed (normal), Open (failing), Half-Open (testing)
+
+---
+
+### **Performance Concepts**
+
+#### **1. Throughput**
+- **Definition**: Number of jobs processed per unit time
+- **Factors**: Worker concurrency, job complexity, Redis performance
+- **Optimization**: Connection pooling, batch operations
+
+#### **2. Latency**
+- **Definition**: Time from job creation to completion
+- **Components**: Queue wait time + processing time
+- **Optimization**: Priority queues, worker scaling
+
+#### **3. Concurrency**
+- **Definition**: Number of jobs processed simultaneously
+- **Limits**: CPU cores, memory, external service limits
+- **Optimization**: Optimal concurrency = CPU cores - 1
+
+#### **4. Backpressure**
+```typescript
+// Prevent queue overflow
+const queueSize = await queue.getWaiting().then(jobs => jobs.length);
+if (queueSize > MAX_QUEUE_SIZE) {
+  // Implement backpressure: reject new jobs or slow down producers
+  throw new Error('Queue full');
+}
+```
+- **Purpose**: Prevent system overload
+- **Strategies**: Rejection, throttling, buffering
+
+---
+
+### **Data Structures Used**
+
+#### **Redis Data Structures in BullMQ:**
+
+**1. Lists** (`bull:queue:wait`):
+```redis
+LPUSH bull:email:wait job-id-1
+LPUSH bull:email:wait job-id-2
+LPOP bull:email:wait  # Worker gets job-id-1
+```
+
+**2. Sorted Sets** (`bull:queue:delayed`):
+```redis
+ZADD bull:email:delayed 1640995200000 job-id-1  # Timestamp as score
+ZRANGEBYSCORE bull:email:delayed -inf 1640995200000  # Get due jobs
+```
+
+**3. Hashes** (`bull:queue:job-id`):
+```redis
+HSET bull:email:123 data '{"to":"user@example.com"}'
+HSET bull:email:123 opts '{"attempts":3}'
+HGETALL bull:email:123
+```
+
+**4. Sets** (`bull:queue:active`):
+```redis
+SADD bull:email:active job-id-1
+SREM bull:email:active job-id-1  # Remove when completed
+```
+
+**5. Pub/Sub** (`bull:queue:events`):
+```redis
+PUBLISH bull:email:events '{"event":"completed","jobId":"123"}'
+SUBSCRIBE bull:email:events
+```
+
+---
+
+### **Security Concepts**
+
+#### **1. Data Sanitization**
+```typescript
+// Remove sensitive data from jobs
+const sanitizeJob = (data: any) => {
+  const sanitized = { ...data };
+  delete sanitized.password;
+  delete sanitized.apiKey;
+  delete sanitized.ssn;
+  return sanitized;
+};
+```
+- **Purpose**: Prevent sensitive data leakage
+- **Implementation**: Input validation and sanitization
+
+#### **2. Access Control**
+```typescript
+// Role-based job permissions
+const secureWorker = new Worker('admin-queue', async (job) => {
+  if (!await hasPermission(job.data.userId, 'admin')) {
+    throw new Error('Insufficient permissions');
+  }
+  return await processAdminJob(job);
+});
+```
+- **Purpose**: Prevent unauthorized job processing
+- **Implementation**: Authentication and authorization checks
+
+#### **3. Rate Limiting**
+```typescript
+// Prevent abuse
+const rateLimitedWorker = new Worker('api-queue', processor, {
+  limiter: {
+    max: 100,
+    duration: 60000  // 100 requests per minute
+  }
+});
+```
+- **Purpose**: Prevent resource exhaustion
+- **Implementation**: Token bucket or sliding window algorithms
+
+---
+
+### **Monitoring Concepts**
+
+#### **1. Key Metrics**
+- **Queue Depth**: Number of waiting jobs
+- **Processing Rate**: Jobs completed per second
+- **Error Rate**: Percentage of failed jobs
+- **Latency**: Average job processing time
+
+#### **2. Health Checks**
+```typescript
+// Queue health monitoring
+const health = {
+  redis: await redis.ping() === 'PONG',
+  queue: await queue.getWaiting().then(() => true).catch(() => false),
+  workers: activeWorkers.length > 0
+};
+```
+
+#### **3. Alerting**
+- **Threshold Alerts**: Queue depth > threshold
+- **Error Alerts**: High failure rate
+- **Performance Alerts**: Slow processing times
+
+---
 
 ## 📋 **Table of Contents**
 - [What is BullMQ?](#what-is-bullmq)
-- [Why BullMQ in Sentinel?](#why-bullmq-in-sentinel)
-- [Architecture Overview](#architecture-overview)
-- [Core Components](#core-components)
-- [Configuration Deep Dive](#configuration-deep-dive)
-- [Job Lifecycle](#job-lifecycle)
-- [Processing Pipeline](#processing-pipeline)
-- [Error Handling & Retry Logic](#error-handling--retry-logic)
-- [Dead Letter Queue](#dead-letter-queue)
-- [Monitoring & Health Checks](#monitoring--health-checks)
-- [API Integration](#api-integration)
+- [Why Choose BullMQ?](#why-choose-bullmq)
+- [Core API Methods and Terms](#core-api-methods-and-terms)
+- [Installation & Setup](#installation--setup)
+- [Core Concepts](#core-concepts)
+- [Basic Usage](#basic-usage)
+- [Advanced Features](#advanced-features)
+- [Job Management](#job-management)
+- [Worker Management](#worker-management)
+- [Error Handling & Retries](#error-handling--retries)
+- [Priority Queues](#priority-queues)
+- [Scheduling & Delayed Jobs](#scheduling--delayed-jobs)
+- [Real-time Monitoring](#real-time-monitoring)
 - [Performance Optimization](#performance-optimization)
-- [Migration Strategy](#migration-strategy)
+- [Security Best Practices](#security-best-practices)
 - [Production Deployment](#production-deployment)
-- [Troubleshooting Guide](#troubleshooting-guide)
+- [Troubleshooting](#troubleshooting)
+- [Use Cases](#use-cases)
+- [Comparison with Alternatives](#comparison-with-alternatives)
+- [Best Practices](#best-practices)
+- [API Reference](#api-reference)
 
 ---
 
 ## 🤔 **What is BullMQ?**
 
-**BullMQ** is a **Redis-backed job queue** for Node.js applications. It provides:
+**BullMQ** is a modern, Redis-backed job queue library for Node.js applications that provides advanced job management, real-time monitoring, and fault tolerance. It's the successor to the popular Bull library, built specifically for modern JavaScript/TypeScript applications.
 
-### **Core Features:**
-- ✅ **Persistent Storage**: Jobs survive server restarts
-- ✅ **Priority Queues**: High/Medium/Low priority processing
-- ✅ **Automatic Retries**: Exponential backoff strategies
-- ✅ **Real-time Monitoring**: Live job status updates
-- ✅ **Distributed Processing**: Multiple workers across instances
-- ✅ **Advanced Scheduling**: Delayed jobs, recurring tasks
-- ✅ **Dead Letter Queues**: Failed job management
+### **Key Characteristics:**
+- ✅ **Redis-Backed**: Uses Redis for job storage and state management
+- ✅ **TypeScript Support**: Full type safety and IntelliSense support
+- ✅ **Advanced Job Management**: Priorities, retries, scheduling, dead letter queues
+- ✅ **Real-time Monitoring**: Live job status updates and progress tracking
+- ✅ **Fault Tolerance**: Automatic recovery and distributed processing
+- ✅ **High Performance**: Optimized for high-throughput scenarios
+- ✅ **Production Ready**: Battle-tested in production environments
 
-### **Why Not Other Solutions?**
-- **vs Bull**: BullMQ is the modern successor with better TypeScript support
-- **vs Redis alone**: BullMQ provides structured job management
-- **vs Database queues**: Redis provides better performance for high-throughput
-
----
-
-## 🎯 **Why BullMQ in Sentinel?**
-
-### **Sentinel's Requirements:**
-```typescript
-// Sentinel needs to handle:
-// 1. Test execution jobs (potentially long-running)
-// 2. High throughput during peak hours
-// 3. Job persistence across deployments
-// 4. Real-time progress tracking
-// 5. Priority-based processing
-// 6. Comprehensive error handling
-```
-
-### **BullMQ Benefits for Sentinel:**
-- ✅ **Scalability**: Handle thousands of concurrent test executions
-- ✅ **Reliability**: Jobs survive server restarts/crashes
-- ✅ **Observability**: Real-time monitoring of test progress
-- ✅ **Performance**: Redis-backed for low-latency operations
-- ✅ **Flexibility**: Priority queues for different test types
-
-### **Real-World Impact:**
-```typescript
-// Before: Synchronous processing (blocking)
-const result = await executeTest(testDefinition); // Blocks API response
-
-// After: Asynchronous processing (non-blocking)
-const testId = await queueService.executeTest(testDefinition);
-// API responds immediately with testId
-// User can check progress/status later
-```
-
----
-
-## 🏗️ **Architecture Overview**
-
-### **Service Architecture:**
+### **Architecture Overview:**
 ```
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   API Service   │────│     Redis       │────│ Integrations    │
-│   (Port 3000)   │    │  (BullMQ Store) │    │   Service       │
-│                 │    │                 │    │  (Port 3001)    │
-│ ┌─────────────┐ │    │ ┌─────────────┐ │    │                 │
-│ │  Queue      │◄├───►│ │  Jobs       │◄├───►│ ┌─────────────┐ │
-│ │  Producer   │ │    │ │  Queue      │ │    │ │  Browser    │ │
-│ └─────────────┘ │    │ └─────────────┘ │    │ │  Engine     │ │
-└─────────────────┘    └─────────────────┘    │ └─────────────┘ │
-                                              └─────────────────┘
+│   Producers     │────│     Redis       │────│   Consumers     │
+│  (API, Services)│    │  (Job Storage)  │    │   (Workers)     │
+│                 │    │                 │    │                 │
+│ ┌─────────────┐ │    │ ┌─────────────┐ │    │ ┌─────────────┐ │
+│ │   Queues    │◄├───►│ │ Job States  │◄├───►│ │ Processing  │ │
+│ │             │ │    │ │             │ │    │ │             │ │
+│ └─────────────┘ │    │ └─────────────┘ │    │ └─────────────┘ │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
 ```
-
-### **Data Flow:**
-```
-1. User submits test → API Service
-2. API creates job → BullMQ Queue (Redis)
-3. Worker picks job → Integrations Service
-4. Integrations processes → Browser Engine
-5. Results stored → Redis
-6. User queries status → API Service
-```
-
-### **Component Responsibilities:**
-
-#### **API Service (Producer):**
-- Accepts test execution requests
-- Creates BullMQ jobs with priorities
-- Provides status/result endpoints
-- Handles queue management operations
-
-#### **Redis (Store):**
-- Persistent job storage
-- Job state management
-- Real-time progress tracking
-- Distributed lock management
-
-#### **Integrations Service (Consumer):**
-- Worker processes that execute tests
-- Browser automation via Playwright
-- Progress reporting back to Redis
-- Error handling and retries
 
 ---
 
-## 🔧 **Core Components**
+## 🎯 **Why Choose BullMQ?**
 
-### **1. Queue Configuration (`queue.config.ts`)**
+### **Advantages Over Traditional Job Queues:**
 
+**1. Modern JavaScript Support**
 ```typescript
-// Environment-based configuration
-export const queueConfig: QueueConfig = {
-  name: 'sentinel-api',
-  redis: {
+// Full TypeScript support
+import { Queue, Worker, Job } from 'bullmq';
+
+interface EmailJobData {
+  to: string;
+  subject: string;
+  body: string;
+}
+
+const emailQueue = new Queue<EmailJobData>('email-queue');
+// Type-safe job data
+```
+
+**2. Advanced Job Control**
+```typescript
+// Priority queues
+await queue.add('email', data, { priority: 10 });
+
+// Delayed execution
+await queue.add('report', data, { delay: 60000 });
+
+// Repeat jobs
+await queue.add('cleanup', data, {
+  repeat: { cron: '0 0 * * *' } // Daily at midnight
+});
+```
+
+**3. Real-time Monitoring**
+```typescript
+// Live job updates
+queue.on('completed', (jobId, result) => {
+  console.log(`Job ${jobId} completed:`, result);
+});
+
+queue.on('failed', (jobId, err) => {
+  console.log(`Job ${jobId} failed:`, err.message);
+});
+```
+
+**4. Fault Tolerance**
+```typescript
+// Automatic retries with backoff
+await queue.add('api-call', data, {
+  attempts: 3,
+  backoff: {
+    type: 'exponential',
+    delay: 2000
+  }
+});
+
+// Dead letter queues
+const failedJobs = await queue.getJobs(['failed']);
+```
+
+### **Performance Benchmarks:**
+- **Throughput**: 1000+ jobs/second
+- **Latency**: <1ms for job operations
+- **Memory Usage**: Efficient Redis storage
+- **Scalability**: Horizontal scaling across multiple workers
+
+---
+
+## 🔧 **Core API Methods and Terms**
+
+### **Essential BullMQ Classes and Methods**
+
+BullMQ provides several core classes and methods that developers use to interact with the job queue system:
+
+#### **1. Queue Class**
+**Purpose**: Primary class for managing job queues
+```typescript
+import { Queue } from 'bullmq';
+
+// Create a queue
+const queue = new Queue('email-queue', {
+  connection: {
+    host: 'localhost',
+    port: 6379
+  },
+  defaultJobOptions: {
+    removeOnComplete: 100,
+    removeOnFail: 50
+  }
+});
+
+// Add a job
+await queue.add('send-email', { email: 'user@example.com', message: 'Hello!' });
+
+// Close the queue
+await queue.close();
+```
+
+**Key Methods:**
+- `add(name, data, options)` - Add a job to the queue
+- `addBulk(jobs)` - Add multiple jobs at once
+- `getJob(jobId)` - Get a specific job by ID
+- `getJobs(types, start, end)` - Get jobs by type and range
+- `getJobCounts()` - Get job counts by state
+- `obliterate()` - Remove all jobs from queue
+- `drain()` - Remove all jobs (delayed, waiting, active)
+- `clean(grace, limit, type)` - Clean old jobs
+- `close()` - Close the queue connection
+
+#### **2. Worker Class**
+**Purpose**: Processes jobs from queues
+```typescript
+import { Worker } from 'bullmq';
+
+const worker = new Worker('email-queue', async (job) => {
+  // Process the job
+  console.log('Processing job:', job.id);
+  console.log('Job data:', job.data);
+
+  // Simulate work
+  await new Promise(resolve => setTimeout(resolve, 1000));
+
+  return { result: 'Email sent successfully' };
+}, {
+  connection: {
+    host: 'localhost',
+    port: 6379
+  },
+  concurrency: 5, // Process 5 jobs simultaneously
+  limiter: {
+    max: 10, // Max jobs per duration
+    duration: 1000 // Duration in milliseconds
+  }
+});
+
+// Event listeners
+worker.on('completed', (job) => {
+  console.log(`Job ${job.id} completed`);
+});
+
+worker.on('failed', (job, err) => {
+  console.log(`Job ${job.id} failed:`, err.message);
+});
+```
+
+**Key Methods:**
+- `run()` - Start processing jobs (called automatically)
+- `pause()` - Pause job processing
+- `resume()` - Resume job processing
+- `close()` - Close the worker
+- `isRunning()` - Check if worker is running
+
+#### **3. Job Class**
+**Purpose**: Represents a unit of work
+```typescript
+// Job instance methods (available in worker processor)
+async (job) => {
+  // Access job properties
+  console.log('Job ID:', job.id);
+  console.log('Job Name:', job.name);
+  console.log('Job Data:', job.data);
+
+  // Update progress
+  await job.updateProgress(50);
+
+  // Add log entry
+  await job.log('Processing started');
+
+  // Update job data
+  await job.update({ processed: true });
+
+  // Move to different queue
+  await job.moveToFailed(new Error('Custom error'), 'my-token');
+
+  return result;
+}
+```
+
+**Key Methods:**
+- `updateProgress(progress)` - Update job progress (0-100)
+- `log(message)` - Add log entry to job
+- `update(data)` - Update job data
+- `remove()` - Remove job from queue
+- `retry()` - Retry failed job
+- `discard()` - Discard job (don't retry)
+- `moveToCompleted(returnValue, token)` - Mark as completed
+- `moveToFailed(error, token)` - Mark as failed
+
+#### **4. QueueScheduler Class**
+**Purpose**: Manages delayed and scheduled jobs
+```typescript
+import { QueueScheduler } from 'bullmq';
+
+const scheduler = new QueueScheduler('email-queue', {
+  connection: {
+    host: 'localhost',
+    port: 6379
+  }
+});
+
+// Scheduler automatically manages delayed jobs
+// No manual methods needed - it's automatic
+```
+
+#### **5. FlowProducer Class**
+**Purpose**: Manages job dependencies and workflows
+```typescript
+import { FlowProducer } from 'bullmq';
+
+const flowProducer = new FlowProducer({
+  connection: {
+    host: 'localhost',
+    port: 6379
+  }
+});
+
+// Add parent job with children
+const flow = await flowProducer.add({
+  name: 'process-order',
+  queueName: 'order-queue',
+  data: { orderId: 123 },
+  children: [
+    {
+      name: 'validate-payment',
+      queueName: 'payment-queue',
+      data: { orderId: 123 }
+    },
+    {
+      name: 'update-inventory',
+      queueName: 'inventory-queue',
+      data: { orderId: 123 }
+    }
+  ]
+});
+```
+
+**Key Methods:**
+- `add(flow)` - Add a flow with parent/child relationships
+- `addBulk(flows)` - Add multiple flows
+- `getFlow(flowId)` - Get a flow by ID
+- `getFlows(types)` - Get flows by type
+
+### **Essential Methods and Operations**
+
+#### **Job Management Methods**
+```typescript
+// Add jobs with different options
+const job1 = await queue.add('urgent-email', data, {
+  priority: 10,
+  delay: 5000, // 5 seconds delay
+  attempts: 3,
+  backoff: {
+    type: 'exponential',
+    delay: 2000
+  }
+});
+
+const job2 = await queue.add('batch-email', data, {
+  repeat: {
+    cron: '0 9 * * *' // Every day at 9 AM
+  }
+});
+
+// Bulk operations
+const jobs = await queue.addBulk([
+  { name: 'email-1', data: { to: 'user1@example.com' } },
+  { name: 'email-2', data: { to: 'user2@example.com' } },
+  { name: 'email-3', data: { to: 'user3@example.com' } }
+]);
+```
+
+#### **Queue Operations**
+```typescript
+// Get queue statistics
+const counts = await queue.getJobCounts();
+// Returns: { active: 2, completed: 150, failed: 3, delayed: 5, waiting: 10 }
+
+const waiting = await queue.getJobs(['waiting'], 0, 10);
+const active = await queue.getJobs(['active'], 0, 10);
+const completed = await queue.getJobs(['completed'], 0, 10);
+const failed = await queue.getJobs(['failed'], 0, 10);
+
+// Clean old jobs
+await queue.clean(24 * 3600 * 1000, 100, 'completed'); // Clean completed jobs older than 24 hours
+await queue.clean(7 * 24 * 3600 * 1000, 50, 'failed'); // Clean failed jobs older than 7 days
+
+// Remove all jobs
+await queue.obliterate({ force: true });
+```
+
+#### **Worker Control Methods**
+```typescript
+// Pause and resume
+await worker.pause();
+await worker.resume();
+
+// Check status
+const isRunning = worker.isRunning();
+const isPaused = worker.isPaused();
+
+// Get worker stats
+const stats = await worker.getWorkerStats();
+```
+
+### **Key Terms and Concepts**
+
+#### **1. Job States**
+```typescript
+// Job lifecycle states
+enum JobState {
+  WAITING = 'waiting',     // Job is waiting to be processed
+  ACTIVE = 'active',       // Job is being processed
+  COMPLETED = 'completed', // Job finished successfully
+  FAILED = 'failed',       // Job failed
+  DELAYED = 'delayed',     // Job is scheduled for later
+  STALLED = 'stalled',     // Job processing was interrupted
+  PRIORITY = 'priority'    // Job has priority over others
+}
+```
+
+#### **2. Job Options**
+```typescript
+interface JobOptions {
+  priority?: number;           // Job priority (0-2^53)
+  delay?: number;             // Delay in milliseconds
+  attempts?: number;          // Maximum retry attempts
+  backoff?: {                 // Retry backoff strategy
+    type: 'fixed' | 'exponential';
+    delay: number;
+  };
+  lifo?: boolean;             // Last In, First Out
+  timeout?: number;           // Job timeout in milliseconds
+  jobId?: string;             // Custom job ID
+  removeOnComplete?: number;  // Keep completed jobs
+  removeOnFail?: number;      // Keep failed jobs
+  stackTraceLimit?: number;   // Stack trace limit
+}
+```
+
+#### **3. Worker Options**
+```typescript
+interface WorkerOptions {
+  concurrency?: number;       // Max concurrent jobs
+  limiter?: {                 // Rate limiting
+    max: number;
+    duration: number;
+    groupKey?: string;
+  };
+  lockDuration?: number;      // Lock duration in milliseconds
+  lockRenewTime?: number;     // Lock renewal time
+  stalledInterval?: number;   // Stalled check interval
+  maxStalledCount?: number;   // Max stalled job count
+  autorun?: boolean;          // Auto-start processing
+}
+```
+
+#### **4. Queue Options**
+```typescript
+interface QueueOptions {
+  connection?: RedisConnection;    // Redis connection
+  prefix?: string;                // Key prefix
+  defaultJobOptions?: JobOptions; // Default job options
+  settings?: {                    // Queue settings
+    lockDuration?: number;
+    stalledInterval?: number;
+    maxStalledCount?: number;
+    guardInterval?: number;
+    retryProcessDelay?: number;
+  };
+}
+```
+
+#### **5. Flow Options**
+```typescript
+interface FlowJob {
+  name: string;               // Job name
+  queueName: string;          // Target queue name
+  data?: any;                 // Job data
+  prefix?: string;            // Queue prefix
+  opts?: JobOptions;          // Job options
+  children?: FlowJob[];       // Child jobs
+}
+```
+
+### **Common Event Types**
+
+#### **Queue Events**
+```typescript
+queue.on('waiting', (jobId) => {
+  console.log(`Job ${jobId} is waiting`);
+});
+
+queue.on('active', (job, jobPromise) => {
+  console.log(`Job ${job.id} started processing`);
+});
+
+queue.on('completed', (job, result) => {
+  console.log(`Job ${job.id} completed with result:`, result);
+});
+
+queue.on('failed', (job, err) => {
+  console.log(`Job ${job.id} failed:`, err.message);
+});
+
+queue.on('stalled', (jobId) => {
+  console.log(`Job ${jobId} has stalled`);
+});
+```
+
+#### **Worker Events**
+```typescript
+worker.on('completed', (job, result) => {
+  console.log(`Worker completed job ${job.id}`);
+});
+
+worker.on('failed', (job, err) => {
+  console.log(`Worker failed job ${job.id}:`, err.message);
+});
+
+worker.on('stalled', (jobId) => {
+  console.log(`Worker detected stalled job ${jobId}`);
+});
+
+worker.on('closing', () => {
+  console.log('Worker is closing');
+});
+```
+
+#### **Job Events**
+```typescript
+job.on('progress', (progress) => {
+  console.log(`Job ${job.id} progress: ${progress}%`);
+});
+
+job.on('completed', (result) => {
+  console.log(`Job ${job.id} completed:`, result);
+});
+
+job.on('failed', (err) => {
+  console.log(`Job ${job.id} failed:`, err.message);
+});
+```
+
+### **Error Handling Methods**
+
+#### **1. onError(callback)**
+**Purpose**: Handle worker errors
+```typescript
+worker.on('error', (err) => {
+  console.error('Worker error:', err);
+});
+```
+
+#### **2. onFailed(callback)**
+**Purpose**: Handle job failures
+```typescript
+worker.on('failed', (job, err) => {
+  console.error(`Job ${job.id} failed:`, err.message);
+
+  // Custom retry logic
+  if (err.message.includes('temporary')) {
+    job.retry();
+  }
+});
+```
+
+#### **3. moveToFailed(error, token)**
+**Purpose**: Manually fail a job
+```typescript
+await job.moveToFailed(new Error('Custom failure reason'), 'my-token');
+```
+
+### **Advanced Methods**
+
+#### **1. getState()**
+**Purpose**: Get current job state
+```typescript
+const state = await job.getState();
+// Returns: 'waiting', 'active', 'completed', 'failed', 'delayed', etc.
+```
+
+#### **2. changePriority(priority)**
+**Purpose**: Change job priority
+```typescript
+await job.changePriority(10);
+```
+
+#### **3. extendLock(duration)**
+**Purpose**: Extend job lock duration
+```typescript
+await job.extendLock(30000); // Extend by 30 seconds
+```
+
+#### **4. promote()**
+**Purpose**: Move delayed job to waiting
+```typescript
+await job.promote();
+```
+
+#### **5. finish()**
+**Purpose**: Mark job as finished (internal use)
+```typescript
+await job.finish();
+```
+
+### **Common Patterns**
+
+#### **1. Producer Pattern**
+```typescript
+class JobProducer {
+  constructor(queueName) {
+    this.queue = new Queue(queueName, { connection: redisConfig });
+  }
+
+  async addJob(name, data, options = {}) {
+    try {
+      const job = await this.queue.add(name, data, {
+        attempts: 3,
+        backoff: { type: 'exponential', delay: 2000 },
+        removeOnComplete: 100,
+        removeOnFail: 50,
+        ...options
+      });
+
+      console.log(`Added job ${job.id} to queue`);
+      return job;
+    } catch (error) {
+      console.error('Failed to add job:', error);
+      throw error;
+    }
+  }
+
+  async addBulkJobs(jobs) {
+    try {
+      const addedJobs = await this.queue.addBulk(jobs);
+      console.log(`Added ${addedJobs.length} jobs to queue`);
+      return addedJobs;
+    } catch (error) {
+      console.error('Failed to add bulk jobs:', error);
+      throw error;
+    }
+  }
+
+  async close() {
+    await this.queue.close();
+  }
+}
+```
+
+#### **2. Consumer Pattern**
+```typescript
+class JobConsumer {
+  constructor(queueName, processor, options = {}) {
+    this.worker = new Worker(queueName, processor, {
+      concurrency: 5,
+      limiter: { max: 10, duration: 1000 },
+      ...options
+    });
+
+    this.setupEventHandlers();
+  }
+
+  setupEventHandlers() {
+    this.worker.on('completed', (job) => {
+      console.log(`Job ${job.id} completed successfully`);
+    });
+
+    this.worker.on('failed', (job, err) => {
+      console.error(`Job ${job.id} failed: ${err.message}`);
+    });
+
+    this.worker.on('stalled', (jobId) => {
+      console.log(`Job ${jobId} has stalled`);
+    });
+  }
+
+  async pause() {
+    await this.worker.pause();
+  }
+
+  async resume() {
+    await this.worker.resume();
+  }
+
+  async close() {
+    await this.worker.close();
+  }
+}
+```
+
+#### **3. Job Monitor Pattern**
+```typescript
+class JobMonitor {
+  constructor(queue) {
+    this.queue = queue;
+    this.interval = setInterval(() => this.checkHealth(), 30000);
+  }
+
+  async checkHealth() {
+    try {
+      const counts = await this.queue.getJobCounts();
+      const totalJobs = counts.active + counts.waiting + counts.delayed;
+
+      console.log(`Queue Health: ${totalJobs} total jobs`);
+      console.log(`Active: ${counts.active}, Waiting: ${counts.waiting}, Failed: ${counts.failed}`);
+
+      // Alert thresholds
+      if (counts.failed > 100) {
+        console.error('ALERT: High failure rate detected!');
+      }
+
+      if (counts.waiting > 1000) {
+        console.warn('WARNING: Queue backlog detected!');
+      }
+
+    } catch (error) {
+      console.error('Health check failed:', error);
+    }
+  }
+
+  stop() {
+    if (this.interval) {
+      clearInterval(this.interval);
+    }
+  }
+}
+```
+
+#### **4. Retry Pattern**
+```typescript
+const retryProcessor = async (job) => {
+  try {
+    // Attempt to process the job
+    const result = await processJob(job.data);
+
+    // Log success
+    await job.log(`Successfully processed on attempt ${job.attemptsMade}`);
+
+    return result;
+
+  } catch (error) {
+    // Determine if error is retryable
+    const isRetryable = !error.message.includes('permanent_failure');
+
+    if (isRetryable && job.attemptsMade < job.opts.attempts) {
+      // Log retry attempt
+      await job.log(`Attempt ${job.attemptsMade} failed: ${error.message}. Retrying...`);
+
+      // Throw to trigger retry
+      throw error;
+    } else {
+      // Log final failure
+      await job.log(`All retry attempts exhausted. Final error: ${error.message}`);
+
+      // Move to failed state
+      await job.moveToFailed(error, 'final-failure');
+
+      throw error;
+    }
+  }
+};
+```
+
+---
+
+## 📦 **Installation & Setup**
+
+### **Basic Installation:**
+```bash
+# Install BullMQ
+npm install bullmq
+
+# Install Redis client (required)
+npm install redis
+
+# TypeScript support
+npm install --save-dev @types/bullmq typescript
+```
+
+### **Docker Setup:**
+```yaml
+version: '3.8'
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+
+  app:
+    build: .
+    environment:
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      - redis
+
+volumes:
+  redis_data:
+```
+
+### **Environment Configuration:**
+```typescript
+// config/queue.ts
+import { Queue, Worker } from 'bullmq';
+
+export const redisConfig = {
     host: process.env.REDIS_HOST || 'localhost',
     port: parseInt(process.env.REDIS_PORT || '6379'),
     password: process.env.REDIS_PASSWORD,
     db: parseInt(process.env.REDIS_DB || '0'),
-  },
+  retryDelayOnFailover: 100,
+  maxRetriesPerRequest: null,
+  lazyConnect: true,
+};
+
+export const queueConfig = {
   defaultJobOptions: {
-    removeOnComplete: 50,    // Keep 50 completed jobs
-    removeOnFail: 20,        // Keep 20 failed jobs
-    attempts: 3,             // Retry 3 times
-    backoff: {
-      type: 'exponential',   // Exponential backoff
-      delay: 2000,          // Start with 2s delay
-    },
+    removeOnComplete: 100,
+    removeOnFail: 50,
+    attempts: 3,
   },
-  concurrency: 5,           // 5 concurrent workers
-  retentionDays: 7,         // Keep jobs for 7 days
 };
 ```
 
-#### **Priority System:**
+---
+
+## 🏗️ **Core Concepts**
+
+### **1. Queues**
+Queues are the primary containers for jobs. They manage job storage, state transitions, and worker coordination.
+
 ```typescript
-export const PRIORITY_VALUES = {
-  high: 1,     // Critical tests (security, smoke)
-  medium: 0,   // Standard tests
-  low: -1,     // Background tests (performance)
-};
+import { Queue } from 'bullmq';
+
+// Create a queue
+const emailQueue = new Queue('email', {
+  connection: redisConfig,
+  defaultJobOptions: {
+    removeOnComplete: 100,
+    attempts: 3,
+  },
+});
+
+// Add jobs to queue
+await emailQueue.add('send-welcome', {
+  email: 'user@example.com',
+  name: 'John'
+});
+
+// Get queue statistics
+const waiting = await emailQueue.getWaiting();
+const active = await emailQueue.getActive();
+const completed = await emailQueue.getCompleted();
 ```
 
-### **2. Job Types (`job.types.ts`)**
+### **2. Jobs**
+Jobs represent units of work to be processed. Each job has data, options, and state information.
 
-#### **Job Data Structure:**
 ```typescript
-interface QueueJobData {
-  testDefinition: TestDefinition;    // What to test
-  options: QueueJobOptions;         // How to run it
-  metadata: QueueJobMetadata;       // Who/when/why
+interface JobData {
+  userId: string;
+  email: string;
+  template: string;
 }
 
-interface QueueJobOptions {
-  priority: 'high' | 'medium' | 'low';
-  timeout: number;                  // Max execution time
-  tags: string[];                  // Test categorization
-  retryAttempts?: number;
-}
-
-interface QueueJobMetadata {
-  tenantId: string;                // Multi-tenant support
-  userId?: string;                 // Who triggered the test
-  requestId?: string;              // Request correlation
-  createdAt: string;               // When job was created
-  source?: 'api' | 'scheduler' | 'webhook';
-}
-```
-
-#### **Job Result Structure:**
-```typescript
-interface QueueJobResult {
-  success: boolean;
-  status: TestExecutionStatus;
-  result?: TestResult;             // Test execution results
-  error?: QueueJobError;           // Error details
-  executionTime: number;           // How long it took
-  completedAt: string;             // When it finished
-  metadata: {
-    startedAt: string;
-    workerId?: string;             // Which worker processed it
-    attemptNumber: number;         // Retry attempt number
-    totalAttempts: number;         // Total retry attempts
+interface JobOptions {
+  priority?: number;
+  delay?: number;
+  attempts?: number;
+  backoff?: {
+    type: 'fixed' | 'exponential';
+    delay: number;
   };
 }
+
+// Create job with options
+const job = await queue.add('email', jobData, {
+  priority: 10,
+  delay: 5000, // 5 seconds
+  attempts: 3,
+  backoff: {
+    type: 'exponential',
+    delay: 2000,
+  },
+});
+
+// Job states: waiting -> active -> completed/failed
+console.log('Job ID:', job.id);
+console.log('Job state:', await job.getState());
 ```
 
-### **3. Queue Service (`queue-test-executor.service.ts`)**
+### **3. Workers**
+Workers consume jobs from queues and execute the processing logic.
 
-#### **Main Service Interface:**
 ```typescript
-class QueueTestExecutorService {
-  async executeTest(testDefinition, options): Promise<string> {
-    // 1. Prepare job data
-    const jobData = {
-      testDefinition,
-      options: { priority: 'medium', timeout: 60000, ... },
-      metadata: { tenantId, userId, createdAt: now() }
-    };
+import { Worker } from 'bullmq';
 
-    // 2. Add to BullMQ queue
-    const jobId = await this.queue.addJob(jobData);
+// Create worker
+const worker = new Worker('email', async (job) => {
+  const { userId, email, template } = job.data;
 
-    // 3. Return job ID for status tracking
-    return jobId;
-  }
+  // Process the job
+  await sendEmail(email, template);
 
-  async getTestStatus(testId): Promise<QueueJobStatus> {
-    // Query job status from Redis
-    const job = await this.queue.getJobStatus(testId);
-    return this.mapJobToStatus(job);
-  }
-}
+  // Update progress (optional)
+  job.updateProgress(50);
+
+  // Return result
+  return { sent: true, recipient: email };
+}, {
+  connection: redisConfig,
+  concurrency: 5, // Process 5 jobs simultaneously
+});
+
+// Handle job completion
+worker.on('completed', (job, result) => {
+  console.log(`Email sent to ${result.recipient}`);
+});
+
+// Handle job failures
+worker.on('failed', (job, err) => {
+  console.log(`Job ${job.id} failed:`, err.message);
+});
 ```
 
-### **4. Job Processor (`test-job.processor.ts`)**
+### **4. Job States**
+Jobs transition through various states during their lifecycle:
 
-#### **Processing Pipeline:**
 ```typescript
-export async function testJobProcessor(job: Job<QueueJobData>): Promise<QueueJobResult> {
-  const startTime = Date.now();
-  const { testDefinition, options } = job.data;
-
-  try {
-    // 1. Update progress (0%)
-    await updateProgress(job, { percentage: 0, ... });
-
-    // 2. Validate job data
-    validateJobData(job.data);
-
-    // 3. Execute test with timeout protection
-    const result = await Promise.race([
-      executeTestWithProgress(job, testDefinition, options),
-      createTimeoutPromise(timeout, job.id)
-    ]);
-
-    // 4. Update final progress (100%)
-    await updateProgress(job, { percentage: 100, ... });
-
-    return {
-      success: result.success,
-      status: result.success ? 'completed' : 'failed',
-      result,
-      executionTime: Date.now() - startTime,
-      completedAt: new Date().toISOString(),
-      metadata: { /* execution details */ }
-    };
-
-  } catch (error) {
-    // Handle errors with categorization
-    const jobError = categorizeError(error);
-    return createErrorResult(jobError, startTime);
-  }
+enum JobState {
+  WAITING = 'waiting',     // Job is waiting in queue
+  ACTIVE = 'active',       // Job is being processed
+  COMPLETED = 'completed', // Job finished successfully
+  FAILED = 'failed',       // Job failed (may retry)
+  DELAYED = 'delayed',     // Job is scheduled for later
+  PAUSED = 'paused',       // Queue is paused
 }
+
+// Check job state
+const state = await job.getState();
+
+// Get jobs by state
+const waitingJobs = await queue.getJobs(['waiting']);
+const activeJobs = await queue.getJobs(['active']);
+const failedJobs = await queue.getJobs(['failed']);
 ```
 
 ---
 
-## ⚙️ **Configuration Deep Dive**
+## 🎯 **Basic Usage**
 
-### **Environment Variables:**
-```bash
-# Queue System Control
-USE_QUEUE_SYSTEM=true              # Enable/disable queue system
-USE_EXTERNAL_EXECUTOR=false        # Use separate executor service
-
-# Redis Configuration
-REDIS_HOST=localhost
-REDIS_PORT=6379
-REDIS_PASSWORD=your-password
-REDIS_DB=0
-
-# Queue Performance
-QUEUE_CONCURRENCY=5                # Concurrent workers
-QUEUE_RETENTION_DAYS=7             # Job retention
-QUEUE_REMOVE_ON_COMPLETE=50        # Keep N completed jobs
-QUEUE_REMOVE_ON_FAIL=20            # Keep N failed jobs
-
-# Retry Configuration
-QUEUE_DEFAULT_ATTEMPTS=3            # Default retry count
-QUEUE_BACKOFF_DELAY=2000            # Initial backoff delay
-
-# Health Monitoring
-QUEUE_MAX_WAITING=100               # Max waiting jobs threshold
-QUEUE_MAX_ACTIVE=50                 # Max active jobs threshold
-QUEUE_MAX_FAILED=20                 # Max failed jobs threshold
-```
-
-### **Priority-Based Timeouts:**
+### **Simple Email Queue Example:**
 ```typescript
-const timeouts = {
-  high: 300000,    // 5 minutes (critical tests)
-  medium: 600000,  // 10 minutes (standard tests)
-  low: 1200000,    // 20 minutes (background tests)
-};
+import { Queue, Worker } from 'bullmq';
+
+// 1. Create queue
+const emailQueue = new Queue('email', { connection: redisConfig });
+
+// 2. Add job
+await emailQueue.add('send-email', {
+  to: 'user@example.com',
+  subject: 'Welcome!',
+  body: 'Welcome to our platform...'
+});
+
+// 3. Create worker
+const emailWorker = new Worker('email', async (job) => {
+  const { to, subject, body } = job.data;
+
+  // Simulate email sending
+  console.log(`Sending email to ${to}: ${subject}`);
+  await new Promise(resolve => setTimeout(resolve, 1000));
+
+  return { sent: true, recipient: to };
+}, { connection: redisConfig });
+
+// 4. Monitor results
+emailWorker.on('completed', (job, result) => {
+  console.log(`Email sent to ${result.recipient}`);
+});
 ```
 
-### **Error-Specific Retry Logic:**
+### **File Processing Example:**
 ```typescript
-const retryConfigs = {
-  network: { attempts: 3, delay: 5000 },    // Network issues
-  timeout: { attempts: 2, delay: 10000 },   // Test timeouts
-  browser: { attempts: 2, delay: 3000 },    // Browser errors
-  system: { attempts: 1, delay: 60000 },    // System issues
-  validation: { attempts: 0, delay: 0 },    // Don't retry validation errors
-};
-```
+import { Queue, Worker } from 'bullmq';
+import * as fs from 'fs';
 
----
+const fileQueue = new Queue('file-processing', { connection: redisConfig });
 
-## 🔄 **Job Lifecycle**
+const fileWorker = new Worker('file-processing', async (job) => {
+  const { filePath, operation } = job.data;
 
-### **Complete Job Flow:**
+  job.updateProgress(10, { status: 'Reading file' });
 
-```
-1. CREATED     → Job added to queue (waiting state)
-2. WAITING     → Job waits in priority queue
-3. ACTIVE      → Worker picks up job for processing
-4. PROGRESS    → Real-time updates during execution
-5. COMPLETED   → Job finishes successfully
-   └─ FAILED   → Job fails (retry or move to DLQ)
-      └─ DEAD  → Job moved to dead letter queue
-```
+  // Read file
+  const content = fs.readFileSync(filePath, 'utf8');
 
-### **State Transitions:**
+  job.updateProgress(50, { status: 'Processing file' });
 
-```typescript
-enum TestExecutionStatus {
-  PENDING    = 'pending',    // Job created, waiting in queue
-  RUNNING    = 'running',    // Worker actively processing
-  COMPLETED  = 'completed',  // Successful execution
-  FAILED     = 'failed',     // Failed after retries
-  TIMEOUT    = 'timeout',    // Exceeded time limit
-  CANCELLED  = 'cancelled'   // Manually cancelled
-}
-```
+  // Process file (example: convert to uppercase)
+  const processed = content.toUpperCase();
 
-### **Progress Tracking:**
-```typescript
-interface QueueJobProgress {
-  percentage: number;        // 0-100 completion
-  currentStep: number;       // Current test step
-  totalSteps: number;        // Total test steps
-  stepName?: string;         // "Login test", "Navigation test"
-  message?: string;          // "Clicking login button"
-  updatedAt: string;         // Last update timestamp
-}
-```
+  job.updateProgress(90, { status: 'Saving result' });
 
----
-
-## 🔬 **Processing Pipeline**
-
-### **Step-by-Step Execution:**
-
-```typescript
-async function testJobProcessor(job) {
-  // 1. Initialize
-  const startTime = Date.now();
-  updateProgress(job, { percentage: 0, stepName: 'Initializing' });
-
-  // 2. Validate
-  validateJobData(job.data);
-  updateProgress(job, { percentage: 5, stepName: 'Validation complete' });
-
-  // 3. Setup Browser
-  const browser = await setupBrowser();
-  updateProgress(job, { percentage: 10, stepName: 'Browser ready' });
-
-  // 4. Execute Test Steps
-  for (let i = 0; i < testDefinition.steps.length; i++) {
-    const step = testDefinition.steps[i];
-    updateProgress(job, {
-      percentage: 10 + (i / testDefinition.steps.length) * 80,
-      currentStep: i + 1,
-      stepName: step.name || `Step ${i + 1}`
-    });
-
-    await executeStep(step, browser);
-  }
-
-  // 5. Cleanup
-  updateProgress(job, { percentage: 95, stepName: 'Cleaning up' });
-  await browser.close();
-
-  // 6. Finalize
-  updateProgress(job, { percentage: 100, stepName: 'Complete' });
+  // Save result
+  fs.writeFileSync(`${filePath}.processed`, processed);
 
   return {
-    success: true,
-    executionTime: Date.now() - startTime,
-    // ... result data
+    originalSize: content.length,
+    processedSize: processed.length,
+    operation: 'uppercase'
   };
-}
+}, { connection: redisConfig });
 ```
 
-### **Timeout Protection:**
+### **API Rate Limiting Example:**
 ```typescript
-const timeoutPromise = createTimeoutPromise(timeout, job.id);
-const result = await Promise.race([
-  executeTestWithProgress(job, testDefinition, options),
-  timeoutPromise  // Will throw if timeout exceeded
+import { Queue, Worker } from 'bullmq';
+
+const apiQueue = new Queue('api-calls', { connection: redisConfig });
+
+const apiWorker = new Worker('api-calls', async (job) => {
+  const { endpoint, method, data, headers } = job.data;
+
+  const response = await fetch(endpoint, {
+    method,
+    headers: {
+      'Content-Type': 'application/json',
+      ...headers
+    },
+    body: JSON.stringify(data)
+  });
+
+  if (!response.ok) {
+    throw new Error(`API call failed: ${response.status}`);
+  }
+
+  return await response.json();
+}, {
+  connection: redisConfig,
+  concurrency: 10, // Rate limit to 10 concurrent calls
+  limiter: {
+    max: 100,     // Max 100 calls
+    duration: 1000 // Per second
+  }
+});
+
+// Usage
+await apiQueue.add('api-call', {
+  endpoint: 'https://api.example.com/users',
+  method: 'POST',
+  data: { name: 'John', email: 'john@example.com' }
+});
+```
+
+---
+
+## ⚡ **Advanced Features**
+
+### **Job Priorities:**
+```typescript
+// High priority jobs processed first
+await queue.add('urgent-email', data, { priority: 10 });
+await queue.add('regular-email', data, { priority: 5 });
+await queue.add('bulk-email', data, { priority: 1 });
+
+// Priority ranges from 1 (lowest) to higher numbers
+```
+
+### **Delayed Jobs:**
+```typescript
+// Job executes after 5 minutes
+await queue.add('scheduled-task', data, {
+  delay: 5 * 60 * 1000 // 5 minutes in milliseconds
+});
+
+// Job executes at specific time
+const executeAt = new Date('2024-01-01T10:00:00');
+await queue.add('scheduled-task', data, {
+  delay: executeAt.getTime() - Date.now()
+});
+```
+
+### **Recurring Jobs:**
+```typescript
+// Cron-based scheduling
+await queue.add('daily-report', data, {
+  repeat: {
+    cron: '0 9 * * *', // Every day at 9 AM
+  }
+});
+
+// Interval-based scheduling
+await queue.add('health-check', data, {
+  repeat: {
+    every: 30000, // Every 30 seconds
+  }
+});
+
+// Fixed rate scheduling
+await queue.add('cleanup', data, {
+  repeat: {
+    every: 3600000, // Every hour
+    limit: 24 // Limit to 24 executions
+  }
+});
+```
+
+### **Job Dependencies:**
+```typescript
+// Job B depends on Job A completion
+const jobA = await queue.add('task-a', dataA);
+const jobB = await queue.add('task-b', dataB, {
+  parent: { id: jobA.id, queue: 'my-queue' }
+});
+
+// Job C depends on both A and B
+const jobC = await queue.add('task-c', dataC, {
+  parent: [
+    { id: jobA.id, queue: 'my-queue' },
+    { id: jobB.id, queue: 'my-queue' }
+  ]
+});
+```
+
+### **Batch Jobs:**
+```typescript
+// Process multiple jobs as a batch
+const jobs = await queue.addBulk([
+  { name: 'email', data: { to: 'user1@example.com' } },
+  { name: 'email', data: { to: 'user2@example.com' } },
+  { name: 'email', data: { to: 'user3@example.com' } },
 ]);
-```
 
-### **Progress Updates:**
-```typescript
-async function updateProgress(job, progress) {
-  await job.updateProgress(progress);
-
-  // Also emit to Redis for real-time monitoring
-  await job.update({
-    opts: {
-      ...job.opts,
-      progress: progress
-    }
-  });
-}
+// Get results for all jobs
+const results = await Promise.all(
+  jobs.map(job => job.waitUntilFinished())
+);
 ```
 
 ---
 
-## 🚨 **Error Handling & Retry Logic**
+## 🎛️ **Job Management**
 
-### **Error Categorization:**
+### **Job Operations:**
 ```typescript
-function categorizeError(error: Error): QueueJobError {
-  if (error.message.includes('timeout')) {
-    return {
-      code: 'TIMEOUT',
-      message: 'Test execution timed out',
-      category: 'timeout',
-      retryable: true
-    };
-  }
+// Get job by ID
+const job = await queue.getJob('job-id-123');
 
-  if (error.message.includes('network')) {
-    return {
-      code: 'NETWORK_ERROR',
-      message: 'Network connectivity issue',
-      category: 'network',
-      retryable: true
-    };
-  }
+// Get job state
+const state = await job.getState();
 
-  if (error.message.includes('validation')) {
-    return {
-      code: 'VALIDATION_ERROR',
-      message: 'Invalid test definition',
-      category: 'validation',
-      retryable: false  // Don't retry validation errors
-    };
-  }
+// Update job data
+await job.update({
+  ...job.data,
+  status: 'updated'
+});
 
-  return {
-    code: 'UNKNOWN_ERROR',
-    message: error.message,
-    category: 'unknown',
-    retryable: true
-  };
-}
+// Remove job
+await job.remove();
+
+// Retry failed job
+await job.retry();
+
+// Move job to different queue
+await job.changePriority(5);
 ```
 
-### **Retry Strategy:**
-
-#### **Exponential Backoff:**
+### **Bulk Operations:**
 ```typescript
-backoff: {
-  type: 'exponential',
-  delay: 2000,  // Initial delay: 2 seconds
-  // Next retry: 4 seconds
-  // Next retry: 8 seconds
-  // Next retry: 16 seconds
-}
+// Get multiple jobs
+const waitingJobs = await queue.getJobs(['waiting'], 0, 100);
+const activeJobs = await queue.getJobs(['active'], 0, 50);
+
+// Bulk job operations
+await queue.clean(24 * 60 * 60 * 1000, 100); // Clean old jobs
+await queue.obliterate({ force: false }); // Remove all jobs
 ```
 
-#### **Category-Specific Retries:**
+### **Job Search and Filtering:**
 ```typescript
-const retryStrategy = {
-  network: { attempts: 3, delay: 5000 },   // Network: 3 tries, 5s delay
-  timeout: { attempts: 2, delay: 10000 },  // Timeout: 2 tries, 10s delay
-  browser: { attempts: 2, delay: 3000 },   // Browser: 2 tries, 3s delay
-  system: { attempts: 1, delay: 60000 },   // System: 1 try, 60s delay
-  validation: { attempts: 0 },             // Validation: No retries
+// Get jobs by pattern
+const emailJobs = await queue.getJobs(['waiting', 'active'], 0, 10, true);
+
+// Get completed jobs
+const completedJobs = await queue.getCompleted(0, 50);
+
+// Get failed jobs
+const failedJobs = await queue.getFailed(0, 50);
+```
+
+---
+
+## 👷 **Worker Management**
+
+### **Worker Configuration:**
+```typescript
+const worker = new Worker('email', processor, {
+  connection: redisConfig,
+  concurrency: 5,          // Process 5 jobs simultaneously
+  limiter: {
+    max: 10,              // Max jobs per duration
+    duration: 1000        // Per second
+  },
+  lockDuration: 30000,    // Job lock duration (30s)
+  lockRenewTime: 15000,   // Renew lock every 15s
+});
+```
+
+### **Worker Events:**
+```typescript
+worker.on('ready', () => {
+  console.log('Worker is ready to process jobs');
+});
+
+worker.on('active', (job, prev) => {
+  console.log(`Job ${job.id} is now active`);
+});
+
+worker.on('completed', (job, result) => {
+  console.log(`Job ${job.id} completed with result:`, result);
+});
+
+worker.on('failed', (job, err) => {
+  console.log(`Job ${job.id} failed with error:`, err.message);
+});
+
+worker.on('progress', (job, progress) => {
+  console.log(`Job ${job.id} progress:`, progress);
+});
+
+worker.on('stalled', (jobId) => {
+  console.log(`Job ${jobId} has stalled`);
+});
+```
+
+### **Multiple Workers:**
+```typescript
+// Different workers for different job types
+const emailWorker = new Worker('email-queue', emailProcessor, {
+  connection: redisConfig,
+  concurrency: 3
+});
+
+const fileWorker = new Worker('file-queue', fileProcessor, {
+  connection: redisConfig,
+  concurrency: 2
+});
+
+// Shared worker for multiple queues
+const generalWorker = new Worker(['queue1', 'queue2'], generalProcessor, {
+  connection: redisConfig,
+  concurrency: 5
+});
+```
+
+### **Worker Lifecycle:**
+```typescript
+// Graceful shutdown
+process.on('SIGTERM', async () => {
+  await worker.close();
+  console.log('Worker closed gracefully');
+});
+
+// Pause worker
+await worker.pause();
+
+// Resume worker
+await worker.resume();
+
+// Close worker
+await worker.close();
+```
+
+---
+
+## 🚨 **Error Handling & Retries**
+
+### **Basic Retry Configuration:**
+```typescript
+await queue.add('api-call', data, {
+  attempts: 3,
+  backoff: {
+    type: 'exponential',
+    delay: 2000
+  }
+});
+```
+
+### **Advanced Retry Strategies:**
+```typescript
+// Custom backoff strategy
+const customBackoff = (attemptsMade: number, err: Error) => {
+  // Different delays based on error type
+  if (err.message.includes('rate limit')) {
+    return 60000; // 1 minute for rate limits
+  }
+  if (err.message.includes('network')) {
+    return Math.min(1000 * Math.pow(2, attemptsMade), 30000);
+  }
+  return 5000; // Default 5 seconds
 };
+
+await queue.add('api-call', data, {
+  attempts: 5,
+  backoff: customBackoff
+});
 ```
 
-### **Dead Letter Queue Integration:**
+### **Error Handling in Workers:**
 ```typescript
-if (job.attemptsMade >= maxRetries) {
-  // Move to dead letter queue
-  await deadLetterQueue.add(job.id, job.data, {
-    reason: 'max_retries_exceeded',
-    finalError: error
-  });
-}
+const worker = new Worker('email', async (job) => {
+  try {
+    const result = await sendEmail(job.data);
+
+    if (!result.success) {
+      // Custom error for retry
+      throw new Error('Email delivery failed');
+    }
+
+    return result;
+  } catch (error) {
+    // Log error for monitoring
+    console.error(`Job ${job.id} failed:`, error);
+
+    // Re-throw for retry or dead letter
+    throw error;
+  }
+}, { connection: redisConfig });
+```
+
+### **Dead Letter Queues:**
+```typescript
+// Create dead letter queue
+const dlq = new Queue('dead-letter-queue', { connection: redisConfig });
+
+// Worker with dead letter handling
+const worker = new Worker('main-queue', async (job) => {
+  try {
+    return await processJob(job);
+  } catch (error) {
+    if (job.attemptsMade >= job.opts.attempts) {
+      // Move to dead letter queue
+      await dlq.add('failed-job', {
+        originalJobId: job.id,
+        originalQueue: job.queueName,
+        error: error.message,
+        data: job.data,
+        failedAt: new Date()
+      });
+    }
+    throw error;
+  }
+}, { connection: redisConfig });
 ```
 
 ---
 
-## ⚰️ **Dead Letter Queue**
+## 📊 **Real-time Monitoring**
 
-### **Purpose:**
-- Store permanently failed jobs
-- Prevent infinite retry loops
-- Enable manual inspection and recovery
-- Track failure patterns for debugging
-
-### **Implementation:**
+### **Queue Events:**
 ```typescript
-class DeadLetterQueue {
-  async add(jobId: string, jobData: any, reason: string) {
-    const dlqJob = await this.queue.add('dead-letter', {
-      originalJobId: jobId,
-      jobData,
-      reason,
-      failedAt: new Date().toISOString()
-    });
-    return dlqJob.id;
-  }
-
-  async getFailedJobs(limit: number = 50, offset: number = 0) {
-    const jobs = await this.queue.getJobs(['completed'], {
-      size: limit,
-      start: offset
-    });
-    return jobs.map(job => ({
-      id: job.id,
-      originalJobId: job.data.originalJobId,
-      reason: job.data.reason,
-      failedAt: job.data.failedAt,
-      jobData: job.data.jobData
-    }));
-  }
-
-  async requeueFailedJob(dlqJobId: string) {
-    const dlqJob = await this.queue.getJob(dlqJobId);
-    if (!dlqJob) throw new Error('DLQ job not found');
-
-    // Requeue to original queue
-    await originalQueue.add(
-      dlqJob.data.jobData.testDefinition.name,
-      dlqJob.data.jobData,
-      { priority: 'low' } // Lower priority for requeued jobs
-    );
-
-    // Remove from DLQ
-    await dlqJob.remove();
-  }
-}
-```
-
----
-
-## 📊 **Monitoring & Health Checks**
-
-### **Queue Metrics:**
-```typescript
-interface QueueMetrics {
-  waiting: number;          // Jobs waiting in queue
-  active: number;           // Jobs being processed
-  completed: number;        // Successfully completed jobs
-  failed: number;           // Failed jobs
-  delayed: number;          // Delayed jobs
-  paused: boolean;          // Is queue paused?
-
-  totalProcessed: number;   // Total jobs processed
-  totalFailed: number;      // Total failures
-  processingRate: number;   // Jobs per minute
-  avgProcessingTime: number; // Average execution time
-  lastProcessedAt?: string;  // Last activity timestamp
-}
-```
-
-### **Health Check Logic:**
-```typescript
-function checkQueueHealth(metrics: QueueMetrics): 'healthy' | 'degraded' | 'unhealthy' {
-  // Check thresholds
-  if (metrics.waiting > 100) return 'degraded';  // Too many waiting
-  if (metrics.active > 50) return 'degraded';    // Too many active
-  if (metrics.failed > 20) return 'unhealthy';   // Too many failures
-
-  // Check processing rate
-  if (metrics.processingRate < 5) return 'degraded'; // Too slow
-
-  // Check staleness
-  const lastActivity = Date.now() - new Date(metrics.lastProcessedAt).getTime();
-  if (lastActivity > 300000) return 'degraded'; // No activity for 5 minutes
-
-  return 'healthy';
-}
-```
-
-### **Real-time Monitoring:**
-```typescript
-// Event listeners for monitoring
+// Monitor queue events
 queue.on('waiting', (jobId) => {
-  console.log(`Job ${jobId} is waiting in queue`);
+  console.log(`Job ${jobId} is waiting`);
 });
 
 queue.on('active', (jobId, prev) => {
-  console.log(`Job ${jobId} started processing`);
+  console.log(`Job ${jobId} is now active`);
 });
 
 queue.on('completed', (jobId, result) => {
-  console.log(`Job ${jobId} completed successfully`);
+  console.log(`Job ${jobId} completed:`, result);
 });
 
 queue.on('failed', (jobId, err) => {
-  console.log(`Job ${jobId} failed: ${err.message}`);
+  console.log(`Job ${jobId} failed:`, err.message);
 });
 
-queue.on('progress', (jobId, progress) => {
-  console.log(`Job ${jobId} progress: ${progress.percentage}%`);
+queue.on('stalled', (jobId) => {
+  console.log(`Job ${jobId} has stalled`);
 });
 ```
 
----
-
-## 🔗 **API Integration**
-
-### **REST API Endpoints:**
-
-#### **Execute Test:**
-```http
-POST /api/v1/tests/execute
-Authorization: Bearer <api-key>
-Content-Type: application/json
-
-{
-  "testDefinition": { /* test data */ },
-  "options": {
-    "priority": "high",
-    "timeout": 30000,
-    "tags": ["smoke", "critical"]
-  }
-}
-
-Response:
-{
-  "success": true,
-  "message": "Test execution started successfully",
-  "timestamp": "2024-01-01T10:00:00.000Z",
-  "data": {
-    "testId": "job-12345"
-  }
-}
-```
-
-#### **Check Status:**
-```http
-GET /api/v1/tests/job-12345/status
-Authorization: Bearer <api-key>
-
-Response:
-{
-  "success": true,
-  "message": "Test status retrieved successfully",
-  "timestamp": "2024-01-01T10:00:05.000Z",
-  "data": {
-    "id": "job-12345",
-    "status": "running",
-    "priority": "high",
-    "progress": {
-      "percentage": 65,
-      "currentStep": 3,
-      "totalSteps": 5,
-      "stepName": "Login verification",
-      "message": "Checking user credentials"
-    },
-    "startedAt": "2024-01-01T10:00:00.000Z"
-  }
-}
-```
-
-#### **Queue Management:**
-```http
-GET /api/v1/queue/stats      # Get queue metrics
-POST /api/v1/queue/pause     # Pause queue processing
-POST /api/v1/queue/resume    # Resume queue processing
-POST /api/v1/queue/jobs/{id}/cancel  # Cancel specific job
-POST /api/v1/queue/jobs/{id}/retry   # Retry failed job
-```
-
-### **Service Integration:**
+### **Queue Metrics:**
 ```typescript
-// In test execution service
-const testExecutorService = getHybridTestExecutorService();
+// Get queue statistics
+const waitingCount = await queue.getWaiting(0, -1).then(jobs => jobs.length);
+const activeCount = await queue.getActive(0, -1).then(jobs => jobs.length);
+const completedCount = await queue.getCompleted(0, -1).then(jobs => jobs.length);
+const failedCount = await queue.getFailed(0, -1).then(jobs => jobs.length);
 
-// Queue-based execution
-const testId = await testExecutorService.executeTest(testDefinition, {
-  priority: 'high',
-  userId: request.auth?.userId,
-  requestId: request.headers['x-request-id']
+// Calculate rates
+const stats = {
+  waiting: waitingCount,
+  active: activeCount,
+  completed: completedCount,
+  failed: failedCount,
+  total: waitingCount + activeCount + completedCount + failedCount
+};
+
+console.log('Queue Stats:', stats);
+```
+
+### **Performance Monitoring:**
+```typescript
+// Monitor job processing time
+const startTime = Date.now();
+
+worker.on('active', (job) => {
+  job.startTime = Date.now();
 });
 
-// Status checking
-const status = await testExecutorService.getTestStatus(testId);
+worker.on('completed', (job) => {
+  const processingTime = Date.now() - job.startTime;
+  console.log(`Job ${job.id} took ${processingTime}ms`);
+});
+
+// Monitor queue throughput
+setInterval(async () => {
+  const completed = await queue.getCompleted(0, -1);
+  const throughput = completed.length / ((Date.now() - startTime) / 1000);
+  console.log(`Throughput: ${throughput.toFixed(2)} jobs/second`);
+}, 60000); // Every minute
 ```
 
 ---
@@ -721,372 +1851,839 @@ const status = await testExecutorService.getTestStatus(testId);
 ### **Redis Configuration:**
 ```redis.conf
 # Memory optimization
-maxmemory 256mb
+maxmemory 512mb
 maxmemory-policy allkeys-lru
 
-# Persistence for job durability
-save 900 1
-save 300 10
-save 60 10000
-
-# Connection pooling
+# Connection settings
 tcp-keepalive 300
+tcp-backlog 511
 timeout 300
 
 # Performance tuning
-tcp-backlog 511
 databases 16
+save 900 1
+save 300 10
+save 60 10000
 ```
 
-### **Worker Concurrency:**
+### **BullMQ Optimization:**
 ```typescript
-// Optimal concurrency based on server capacity
-const optimalConcurrency = Math.max(1, Math.floor(os.cpus().length / 2));
-
-// For I/O bound operations (like browser automation)
-const browserConcurrency = Math.min(optimalConcurrency, 5);
-```
-
-### **Connection Pooling:**
-```typescript
-// BullMQ automatically handles connection pooling
-const queue = new Queue('test-execution', {
+// Optimized queue configuration
+const optimizedQueue = new Queue('high-throughput', {
   connection: {
-    host: 'localhost',
-    port: 6379,
-    maxRetriesPerRequest: null,  // Important for BullMQ
+    ...redisConfig,
+    maxRetriesPerRequest: null,
     retryDelayOnFailover: 100,
     lazyConnect: true,
+  },
+  defaultJobOptions: {
+    removeOnComplete: 1000,  // Keep more completed jobs
+    removeOnFail: 500,       // Keep more failed jobs
+    attempts: 3,
+    backoff: {
+      type: 'exponential',
+      delay: 1000,
+    },
+  },
+  settings: {
+    lockDuration: 30000,     // 30 second lock
+    stalledInterval: 30000,  // 30 second stall check
+    maxStalledCount: 1,      // Max stalled attempts
   }
 });
 ```
 
-### **Memory Management:**
+### **Worker Optimization:**
 ```typescript
-// Limit completed jobs in memory
-defaultJobOptions: {
-  removeOnComplete: 50,    // Keep recent completed jobs
-  removeOnFail: 20,        // Keep recent failed jobs
-}
+// High-performance worker
+const optimizedWorker = new Worker('processing', processor, {
+  connection: redisConfig,
+  concurrency: Math.max(1, os.cpus().length - 1), // CPU cores - 1
+  limiter: {
+    max: 1000,      // Max jobs per second
+    duration: 1000
+  },
+  settings: {
+    lockDuration: 30000,
+    lockRenewTime: 15000,
+  }
+});
+```
 
-// Periodic cleanup
-setInterval(async () => {
-  await queue.clean(24 * 60 * 60 * 1000, 100); // Clean old jobs
-}, 60 * 60 * 1000); // Hourly cleanup
+### **Connection Pooling:**
+```typescript
+// Redis connection pooling for high throughput
+import { Cluster } from 'ioredis';
+
+const cluster = new Cluster([
+  { host: 'redis-1', port: 6379 },
+  { host: 'redis-2', port: 6379 },
+  { host: 'redis-3', port: 6379 }
+], {
+  redisOptions: {
+    password: process.env.REDIS_PASSWORD
+  },
+  clusterRetryDelay: 100,
+  maxRedirections: 16
+});
+
+const queue = new Queue('cluster-queue', {
+  connection: cluster,
+  defaultJobOptions: {
+    removeOnComplete: 100,
+    attempts: 3
+  }
+});
 ```
 
 ---
 
-## 🔄 **Migration Strategy**
+## 🔐 **Security Best Practices**
 
-### **Hybrid Approach:**
+### **Redis Security:**
+```bash
+# Redis configuration
+bind 127.0.0.1          # Only localhost
+port 6379               # Default port
+requirepass strongpassword
+timeout 300             # Connection timeout
+maxclients 1000         # Max connections
+```
+
+### **BullMQ Security:**
 ```typescript
-class HybridTestExecutorService {
-  constructor(
-    private queueService: QueueTestExecutorService,
-    private directService: DirectTestExecutorService
-  ) {}
-
-  async executeTest(testDefinition, options) {
-    // Check if queue system is enabled
-    if (process.env.USE_QUEUE_SYSTEM === 'true') {
-      return this.queueService.executeTest(testDefinition, options);
-    } else {
-      // Fallback to direct execution
-      return this.directService.executeTest(testDefinition, options);
+// Secure job data handling
+const secureQueue = new Queue('secure-jobs', {
+  connection: {
+    ...redisConfig,
+    password: process.env.REDIS_PASSWORD,
+    tls: {
+      ca: fs.readFileSync('/path/to/ca.crt'),
+      cert: fs.readFileSync('/path/to/client.crt'),
+      key: fs.readFileSync('/path/to/client.key')
     }
   }
-}
+});
+
+// Sanitize job data
+const sanitizeJobData = (data: any) => {
+  // Remove sensitive information
+  const sanitized = { ...data };
+  delete sanitized.password;
+  delete sanitized.apiKey;
+  return sanitized;
+};
 ```
 
-### **Gradual Rollout:**
-```bash
-# Phase 1: Enable queue for low-priority tests
-export QUEUE_LOW_PRIORITY_ONLY=true
-
-# Phase 2: Enable for all tests
-export USE_QUEUE_SYSTEM=true
-
-# Phase 3: Disable direct execution
-export USE_DIRECT_EXECUTION=false
-```
-
-### **Rollback Plan:**
+### **Access Control:**
 ```typescript
-// Automatic fallback if queue is unavailable
-async function executeWithFallback(testDefinition, options) {
-  try {
-    return await queueService.executeTest(testDefinition, options);
-  } catch (queueError) {
-    console.warn('Queue unavailable, falling back to direct execution');
-    return await directService.executeTest(testDefinition, options);
+// Role-based job access
+const adminQueue = new Queue('admin-jobs', { connection: redisConfig });
+const userQueue = new Queue('user-jobs', { connection: redisConfig });
+
+// Check permissions before processing
+const secureWorker = new Worker('admin-jobs', async (job) => {
+  // Verify admin permissions
+  if (!await checkAdminPermissions(job.data.userId)) {
+    throw new Error('Insufficient permissions');
   }
-}
+
+  return await processAdminJob(job.data);
+}, { connection: redisConfig });
 ```
 
 ---
 
 ## 🚀 **Production Deployment**
 
-### **Infrastructure Setup:**
+### **Docker Compose Setup:**
 ```yaml
-# docker-compose.yml for production
 version: '3.8'
 services:
   redis:
     image: redis:7-alpine
-    command: redis-server --appendonly yes
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
+    ports:
+      - "6379:6379"
     volumes:
-      - redis-data:/data
+      - redis_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 3s
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 30s
+      timeout: 10s
       retries: 3
 
-  api:
-    build: ./packages/@sentinel/services/api
+  app:
+    build: .
     environment:
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-      - USE_QUEUE_SYSTEM=true
-      - QUEUE_CONCURRENCY=10
+      - REDIS_URL=redis://redis:6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
     depends_on:
       redis:
         condition: service_healthy
+    deploy:
+      replicas: 3
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
 
-  integrations:
-    build: ./packages/@sentinel/integrations
+  worker:
+    build: .
+    command: npm run worker
     environment:
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
+      - REDIS_URL=redis://redis:6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
     depends_on:
-      redis:
-        condition: service_healthy
+      - redis
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
 
 volumes:
-  redis-data:
+  redis_data:
 ```
 
 ### **Kubernetes Deployment:**
 ```yaml
-# Redis StatefulSet
 apiVersion: apps/v1
-kind: StatefulSet
+kind: Deployment
 metadata:
-  name: sentinel-redis
+  name: bullmq-worker
 spec:
-  replicas: 1
+  replicas: 3
+  selector:
+    matchLabels:
+      app: bullmq-worker
   template:
+    metadata:
+      labels:
+        app: bullmq-worker
     spec:
       containers:
-      - name: redis
-        image: redis:7-alpine
-        ports:
-        - containerPort: 6379
-        volumeMounts:
-        - name: redis-data
-          mountPath: /data
+      - name: worker
+        image: myapp:latest
+        command: ["npm", "run", "worker"]
+        env:
+        - name: REDIS_URL
+          valueFrom:
+            secretKeyRef:
+              name: redis-secret
+              key: url
         resources:
-          requests:
-            memory: "256Mi"
-            cpu: "100m"
           limits:
+            cpu: "500m"
             memory: "512Mi"
-            cpu: "200m"
+          requests:
+            cpu: "250m"
+            memory: "256Mi"
+        livenessProbe:
+          exec:
+            command: ["node", "healthcheck.js"]
+          initialDelaySeconds: 30
+          periodSeconds: 30
 ```
 
-### **Scaling Strategy:**
-```yaml
-# Horizontal Pod Autoscaling
-apiVersion: autoscaling/v2
-kind: HorizontalPodAutoscaler
-metadata:
-  name: sentinel-api-hpa
-spec:
-  scaleTargetRef:
-    apiVersion: apps/v1
-    kind: Deployment
-    name: sentinel-api
-  minReplicas: 2
-  maxReplicas: 10
-  metrics:
-  - type: Resource
-    resource:
-      name: cpu
-      target:
-        type: Utilization
-        averageUtilization: 70
-```
-
----
-
-## 🔧 **Troubleshooting Guide**
-
-### **Common Issues:**
-
-#### **1. Redis Connection Errors:**
-```bash
-# Check Redis connectivity
-redis-cli ping
-
-# Check Redis logs
-docker logs sentinel-redis
-
-# Test connection from application
-curl http://localhost:3000/api/v1/queue/health
-```
-
-#### **2. High Queue Depth:**
+### **Health Checks:**
 ```typescript
-// Check queue metrics
-const metrics = await queueService.getQueueMetrics();
-console.log('Queue depth:', metrics.waiting);
+// Application health check
+app.get('/health', async (req, res) => {
+  try {
+    // Check Redis connectivity
+    await redis.ping();
 
-// Scale up workers
-export QUEUE_CONCURRENCY=10
+    // Check queue health
+    const waiting = await queue.getWaiting(0, 1);
 
-// Check for resource bottlenecks
-top -p $(pgrep -f "node.*worker")
-```
-
-#### **3. Job Stalling:**
-```typescript
-// Find stalled jobs
-const stalledJobs = await queue.getJobs(['active'], 0, 100, true);
-stalledJobs.forEach(job => {
-  if (Date.now() - job.processedOn > 300000) { // 5 minutes
-    console.log('Stalled job:', job.id);
-    job.moveToFailed(new Error('Job stalled'), true);
+    res.json({
+      status: 'healthy',
+      redis: 'connected',
+      queue: 'operational',
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    res.status(503).json({
+      status: 'unhealthy',
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
   }
 });
 ```
 
-#### **4. Memory Issues:**
+---
+
+## 🔧 **Troubleshooting**
+
+### **Common Issues:**
+
+#### **Connection Problems:**
+```bash
+# Test Redis connectivity
+redis-cli -h localhost -p 6379 ping
+
+# Check Redis logs
+docker logs redis-container
+
+# Verify BullMQ connection
+node -e "
+const { Queue } = require('bullmq');
+const queue = new Queue('test', { connection: { host: 'localhost', port: 6379 } });
+queue.add('test-job', { data: 'test' }).then(() => console.log('Connected'));
+"
+```
+
+#### **Job Stalling:**
 ```typescript
-// Check Redis memory usage
-redis-cli info memory
+// Find stalled jobs
+const stalledJobs = await queue.getJobs(['active'], 0, 100, true);
+
+for (const job of stalledJobs) {
+  const timeSinceActive = Date.now() - job.processedOn;
+  if (timeSinceActive > 5 * 60 * 1000) { // 5 minutes
+    console.log(`Stalled job: ${job.id}`);
+    await job.moveToFailed(new Error('Job stalled'), true);
+  }
+}
+```
+
+#### **Memory Issues:**
+```typescript
+// Monitor Redis memory
+const redis = new Redis(redisConfig);
+const memory = await redis.info('memory');
+console.log('Redis memory:', memory);
 
 // Clean up old jobs
 await queue.clean(24 * 60 * 60 * 1000, 1000); // 24 hours, 1000 jobs
 
-// Monitor job retention
-export QUEUE_REMOVE_ON_COMPLETE=20
-export QUEUE_REMOVE_ON_FAIL=10
-```
-
-#### **5. Worker Performance:**
-```typescript
-// Monitor worker performance
-queue.on('completed', (jobId, result) => {
-  console.log(`Job ${jobId} took ${result.executionTime}ms`);
+// Adjust memory settings
+await queue.updateSettings({
+  removeOnComplete: 100,
+  removeOnFail: 50
 });
-
-// Check for resource leaks
-const memUsage = process.memoryUsage();
-if (memUsage.heapUsed > 100 * 1024 * 1024) { // 100MB
-  console.warn('High memory usage detected');
-}
 ```
 
-### **Debug Commands:**
-```bash
-# Check queue status
-redis-cli KEYS "bull:*"
-
-# Monitor queue in real-time
-redis-cli MONITOR
-
-# View job details
-redis-cli HGETALL "bull:test-execution:123"
-
-# Check worker status
-ps aux | grep worker
-```
-
-### **Performance Tuning:**
+#### **Performance Issues:**
 ```typescript
-// Optimize BullMQ settings
-const optimizedQueue = new Queue('test-execution', {
-  connection: {
-    maxRetriesPerRequest: null,
-    retryDelayOnFailover: 100,
-    lazyConnect: true,
-  },
-  defaultJobOptions: {
-    removeOnComplete: 50,
-    removeOnFail: 20,
-    attempts: 3,
-    backoff: {
-      type: 'exponential',
-      delay: 2000,
+// Monitor queue performance
+const monitorPerformance = async () => {
+  const startTime = Date.now();
+  const startCompleted = await queue.getCompleted(0, -1).then(jobs => jobs.length);
+
+  setTimeout(async () => {
+    const endCompleted = await queue.getCompleted(0, -1).then(jobs => jobs.length);
+    const throughput = (endCompleted - startCompleted) / ((Date.now() - startTime) / 1000);
+    console.log(`Throughput: ${throughput.toFixed(2)} jobs/second`);
+  }, 60000);
+};
+```
+
+---
+
+## 💡 **Use Cases**
+
+### **1. Email Processing:**
+```typescript
+const emailQueue = new Queue('email', { connection: redisConfig });
+
+const emailWorker = new Worker('email', async (job) => {
+  const { to, subject, template, data } = job.data;
+
+  // Render email template
+  const html = await renderTemplate(template, data);
+
+  // Send email
+  await sendEmail({
+    to,
+    subject,
+    html
+  });
+
+  return { sent: true, recipient: to };
+}, { connection: redisConfig });
+
+// Usage
+await emailQueue.add('send-welcome', {
+  to: 'user@example.com',
+  subject: 'Welcome!',
+  template: 'welcome-email',
+  data: { name: 'John' }
+});
+```
+
+### **2. File Processing:**
+```typescript
+const fileQueue = new Queue('file-processing', { connection: redisConfig });
+
+const fileWorker = new Worker('file-processing', async (job) => {
+  const { filePath, operations } = job.data;
+
+  let result = fs.readFileSync(filePath);
+
+  for (const op of operations) {
+    job.updateProgress(25, { status: `Applying ${op.type}` });
+
+    switch (op.type) {
+      case 'resize':
+        result = await resizeImage(result, op.width, op.height);
+        break;
+      case 'compress':
+        result = await compressImage(result, op.quality);
+        break;
+      case 'watermark':
+        result = await addWatermark(result, op.text);
+        break;
+    }
+  }
+
+  const outputPath = `${filePath}.processed`;
+  fs.writeFileSync(outputPath, result);
+
+  return {
+    originalSize: result.length,
+    outputPath,
+    operations: operations.length
+  };
+}, { connection: redisConfig });
+```
+
+### **3. API Rate Limiting:**
+```typescript
+const apiQueue = new Queue('api-calls', { connection: redisConfig });
+
+const apiWorker = new Worker('api-calls', async (job) => {
+  const { endpoint, method, data, headers } = job.data;
+
+  const response = await fetch(endpoint, {
+    method,
+    headers: {
+      'Content-Type': 'application/json',
+      ...headers
     },
-  },
-});
+    body: JSON.stringify(data)
+  });
 
-// Connection pooling
-const worker = new Worker('test-execution', processor, {
-  connection: {
-    maxRetriesPerRequest: null,
-  },
-  concurrency: Math.max(1, os.cpus().length - 1),
+  if (!response.ok) {
+    throw new Error(`API call failed: ${response.status}`);
+  }
+
+  return await response.json();
+}, {
+  connection: redisConfig,
+  concurrency: 10, // Rate limit to 10 concurrent calls
+  limiter: {
+    max: 100,     // Max 100 calls
+    duration: 1000 // Per second
+  }
 });
 ```
+
+### **4. Report Generation:**
+```typescript
+const reportQueue = new Queue('reports', { connection: redisConfig });
+
+const reportWorker = new Worker('reports', async (job) => {
+  const { type, parameters, userId } = job.data;
+
+  job.updateProgress(10, { status: 'Fetching data' });
+
+  // Fetch data from database
+  const data = await fetchReportData(type, parameters);
+
+  job.updateProgress(50, { status: 'Processing data' });
+
+  // Process data
+  const processedData = await processReportData(data);
+
+  job.updateProgress(80, { status: 'Generating report' });
+
+  // Generate report (PDF, Excel, etc.)
+  const reportBuffer = await generateReport(processedData, type);
+
+  job.updateProgress(95, { status: 'Saving report' });
+
+  // Save to storage
+  const reportUrl = await saveReport(reportBuffer, userId, type);
+
+  return {
+    reportUrl,
+    size: reportBuffer.length,
+    generatedAt: new Date().toISOString()
+  };
+}, { connection: redisConfig });
+```
+
+---
+
+## ⚖️ **Comparison with Alternatives**
+
+### **BullMQ vs Bull:**
+```typescript
+// BullMQ (Modern, TypeScript-first)
+import { Queue, Worker, Job } from 'bullmq';
+
+const queue = new Queue<EmailData>('email', {
+  connection: redisConfig
+});
+
+// Full TypeScript support
+interface EmailData {
+  to: string;
+  subject: string;
+  body: string;
+}
+
+// Bull (Legacy, JavaScript-focused)
+const Queue = require('bull');
+
+const queue = new Queue('email', {
+  redis: redisConfig
+});
+
+// No built-in TypeScript support
+```
+
+### **BullMQ vs Agenda:**
+```typescript
+// BullMQ (Redis-based, high performance)
+const queue = new Queue('email', { connection: redisConfig });
+await queue.add('send-email', data, { delay: 60000 });
+
+// Agenda (MongoDB-based, scheduling focused)
+const agenda = new Agenda({ db: { address: mongoUrl } });
+agenda.define('send email', async (job) => {
+  await sendEmail(job.attrs.data);
+});
+await agenda.schedule('in 1 minute', 'send email', data);
+```
+
+### **BullMQ vs Bee-Queue:**
+```typescript
+// BullMQ (Advanced features, production ready)
+const queue = new Queue('email', {
+  connection: redisConfig,
+  defaultJobOptions: {
+    attempts: 3,
+    backoff: { type: 'exponential', delay: 2000 }
+  }
+});
+
+// Bee-Queue (Simple, lightweight)
+const queue = new Bee('email', { redis: redisConfig });
+queue.process(async (job) => {
+  // Simple processing
+  return await sendEmail(job.data);
+});
+```
+
+### **When to Choose BullMQ:**
+
+**✅ Best For:**
+- High-throughput applications
+- Complex job workflows
+- Real-time monitoring requirements
+- Priority-based job processing
+- Advanced retry and error handling
+- TypeScript applications
+- Production-scale applications
+
+**❌ Consider Alternatives For:**
+- Simple, low-volume job processing
+- MongoDB-based applications (use Agenda)
+- Lightweight, minimal dependencies (use Bee-Queue)
+- Legacy JavaScript applications (Bull might suffice)
 
 ---
 
 ## 🎯 **Best Practices**
 
 ### **1. Job Design:**
-- Keep jobs small and focused
-- Include comprehensive metadata
-- Handle failures gracefully
-- Use appropriate priorities
+```typescript
+// Good: Focused, single-responsibility jobs
+interface EmailJobData {
+  to: string;
+  subject: string;
+  templateId: string;
+  variables: Record<string, any>;
+}
 
-### **2. Monitoring:**
-- Set up comprehensive logging
-- Monitor queue depth and processing rates
-- Alert on failure thresholds
-- Track performance metrics
+await queue.add('send-template-email', {
+  to: 'user@example.com',
+  subject: 'Welcome!',
+  templateId: 'welcome-email',
+  variables: { name: 'John', company: 'Acme' }
+});
 
-### **3. Error Handling:**
-- Implement proper retry strategies
-- Use dead letter queues for unrecoverable failures
-- Categorize errors for better handling
-- Provide detailed error information
+// Bad: Overloaded jobs
+await queue.add('process-user', {
+  userId: 123,
+  sendEmail: true,
+  updateProfile: true,
+  createReport: true,
+  notifyAdmins: true
+  // Too many responsibilities
+});
+```
 
-### **4. Scaling:**
-- Design for horizontal scaling
-- Use connection pooling
-- Monitor resource usage
-- Plan for peak loads
+### **2. Error Handling:**
+```typescript
+const worker = new Worker('email', async (job) => {
+  try {
+    // Validate input
+    if (!job.data.to || !job.data.subject) {
+      throw new Error('Missing required fields: to, subject');
+    }
 
-### **5. Reliability:**
-- Enable job persistence
-- Implement health checks
-- Set up proper monitoring
-- Plan for failure scenarios
+    // Process job
+    const result = await sendEmail(job.data);
+
+    if (!result.success) {
+      throw new Error(`Email delivery failed: ${result.error}`);
+    }
+
+    return result;
+  } catch (error) {
+    // Log error with context
+    console.error(`Job ${job.id} failed:`, {
+      error: error.message,
+      jobData: job.data,
+      attemptsMade: job.attemptsMade
+    });
+
+    throw error; // Re-throw for retry
+  }
+}, {
+  connection: redisConfig,
+  concurrency: 5
+});
+```
+
+### **3. Monitoring & Alerting:**
+```typescript
+// Monitor queue health
+const monitorQueue = async () => {
+  const waiting = await queue.getWaiting(0, -1);
+  const active = await queue.getActive(0, -1);
+  const failed = await queue.getFailed(0, -1);
+
+  const metrics = {
+    waitingCount: waiting.length,
+    activeCount: active.length,
+    failedCount: failed.length,
+    timestamp: new Date().toISOString()
+  };
+
+  // Alert if too many failed jobs
+  if (failed.length > 100) {
+    await sendAlert('High failure rate detected', metrics);
+  }
+
+  // Log metrics
+  console.log('Queue metrics:', metrics);
+};
+
+// Monitor every 5 minutes
+setInterval(monitorQueue, 5 * 60 * 1000);
+```
+
+### **4. Resource Management:**
+```typescript
+// Configure appropriate resource limits
+const worker = new Worker('processing', processor, {
+  connection: redisConfig,
+  concurrency: Math.max(1, os.cpus().length - 1),
+  limiter: {
+    max: 100,     // Max jobs per second
+    duration: 1000
+  },
+  settings: {
+    lockDuration: 30000,    // 30 second job lock
+    lockRenewTime: 15000,   // Renew every 15 seconds
+    stalledInterval: 30000, // Check for stalled jobs
+  }
+});
+
+// Graceful shutdown
+process.on('SIGTERM', async () => {
+  console.log('Shutting down worker...');
+  await worker.close();
+  process.exit(0);
+});
+```
+
+### **5. Security:**
+```typescript
+// Sanitize job data
+const sanitizeJobData = (data: any) => {
+  const sanitized = { ...data };
+
+  // Remove sensitive fields
+  delete sanitized.password;
+  delete sanitized.apiKey;
+  delete sanitized.ssn;
+
+  // Validate required fields
+  if (!sanitized.userId) {
+    throw new Error('userId is required');
+  }
+
+  return sanitized;
+};
+
+// Use in worker
+const worker = new Worker('secure-job', async (job) => {
+  const cleanData = sanitizeJobData(job.data);
+  return await processSecureJob(cleanData);
+}, { connection: redisConfig });
+```
+
+### **6. Performance:**
+```typescript
+// Optimize for high throughput
+const highThroughputQueue = new Queue('high-volume', {
+  connection: {
+    ...redisConfig,
+    maxRetriesPerRequest: null,
+    retryDelayOnFailover: 100
+  },
+  defaultJobOptions: {
+    removeOnComplete: 1000,  // Keep more completed jobs
+    removeOnFail: 500,       // Keep more failed jobs
+    attempts: 3,
+    backoff: {
+      type: 'exponential',
+      delay: 1000
+    }
+  }
+});
+
+// Batch job processing
+const batchJobs = [];
+for (let i = 0; i < 1000; i++) {
+  batchJobs.push({
+    name: 'process-item',
+    data: { itemId: i }
+  });
+}
+
+await queue.addBulk(batchJobs);
+```
 
 ---
 
-## 📚 **Additional Resources**
+## 📚 **API Reference**
 
-- [BullMQ Official Documentation](https://docs.bullmq.io/)
-- [Redis Documentation](https://redis.io/documentation)
-- [BullMQ GitHub Repository](https://github.com/taskforcesh/bullmq)
-- [Redis Best Practices](https://redis.io/topics/best-practices)
+### **Queue Methods:**
+```typescript
+// Job Management
+await queue.add(name, data, options?)           // Add job
+await queue.addBulk(jobs)                       // Add multiple jobs
+await queue.getJob(jobId)                       // Get job by ID
+await queue.getJobs(states, start?, end?)       // Get jobs by state
+
+// Queue Control
+await queue.pause()                             // Pause queue
+await queue.resume()                            // Resume queue
+await queue.clean(grace, limit?, states?)       // Clean old jobs
+await queue.obliterate(options?)                // Remove all jobs
+
+// Queue Info
+await queue.getWaiting(start?, end?)            // Get waiting jobs
+await queue.getActive(start?, end?)             // Get active jobs
+await queue.getCompleted(start?, end?)          // Get completed jobs
+await queue.getFailed(start?, end?)             // Get failed jobs
+```
+
+### **Worker Methods:**
+```typescript
+// Worker Control
+await worker.pause()                            // Pause worker
+await worker.resume()                           // Resume worker
+await worker.close()                            // Close worker
+
+// Worker Info
+worker.concurrency                             // Current concurrency
+worker.opts                                     // Worker options
+```
+
+### **Job Methods:**
+```typescript
+// Job Control
+await job.retry()                               // Retry job
+await job.moveToFailed(error, token?)           // Mark as failed
+await job.moveToCompleted(result, token?)       // Mark as completed
+
+// Job Info
+await job.getState()                            // Get job state
+await job.update(data)                          // Update job data
+await job.updateProgress(progress, data?)       // Update progress
+await job.remove()                              // Remove job
+```
+
+### **Common Options:**
+```typescript
+interface JobOptions {
+  priority?: number;                            // Job priority (1-∞)
+  delay?: number;                               // Delay in milliseconds
+  attempts?: number;                            // Max retry attempts
+  backoff?: {
+    type: 'fixed' | 'exponential';              // Backoff type
+    delay: number;                              // Base delay
+  };
+  removeOnComplete?: number | boolean;          // Keep completed jobs
+  removeOnFail?: number | boolean;              // Keep failed jobs
+  jobId?: string;                               // Custom job ID
+  repeat?: {
+    cron?: string;                              // Cron expression
+    every?: number;                             // Interval in ms
+    limit?: number;                             // Max repetitions
+  };
+}
+
+interface WorkerOptions {
+  connection?: RedisConfig;                     // Redis connection
+  concurrency?: number;                         // Max concurrent jobs
+  limiter?: {
+    max: number;                                // Max jobs
+    duration: number;                           // Time window
+  };
+  lockDuration?: number;                        // Job lock duration
+  lockRenewTime?: number;                       // Lock renewal interval
+}
+```
 
 ---
 
 ## 🎉 **Conclusion**
 
-BullMQ provides Sentinel with a robust, scalable job queue system that can handle thousands of concurrent test executions while maintaining reliability and observability. The implementation includes:
+BullMQ is a powerful, modern job queue library for Node.js that provides:
 
-- ✅ **Comprehensive job management** with priorities and retries
-- ✅ **Real-time monitoring** and progress tracking
-- ✅ **Error handling** with dead letter queues
-- ✅ **Scalability** through Redis-backed persistence
-- ✅ **Production readiness** with health checks and metrics
-- ✅ **Migration support** with hybrid execution modes
+- **🚀 High Performance**: Redis-backed with optimized throughput
+- **🔧 Advanced Features**: Priorities, retries, scheduling, dead letter queues
+- **📊 Real-time Monitoring**: Live job status updates and progress tracking
+- **🛡️ Fault Tolerance**: Automatic recovery and distributed processing
+- **📝 TypeScript Support**: Full type safety and IntelliSense
+- **🏗️ Production Ready**: Battle-tested in large-scale applications
 
-This BullMQ implementation enables Sentinel to process test executions asynchronously, providing better user experience and system reliability for large-scale test automation workflows.
+### **Key Benefits:**
+- **Scalability**: Handle thousands of jobs per second
+- **Reliability**: Jobs survive server restarts and crashes
+- **Flexibility**: Support for complex job workflows and dependencies
+- **Observability**: Comprehensive monitoring and alerting
+- **Developer Experience**: Excellent TypeScript support and documentation
+
+### **Use Cases:**
+- **Email Processing**: Bulk email sending with retry logic
+- **File Processing**: Image resizing, video encoding, document processing
+- **API Integration**: Rate-limited API calls with error handling
+- **Report Generation**: Scheduled report creation and delivery
+- **Background Tasks**: Database cleanup, cache warming, notifications
+
+BullMQ is the modern choice for job queue management in Node.js applications, offering enterprise-grade features with excellent developer experience. Whether you're building a small API service or a large-scale distributed system, BullMQ provides the tools you need for reliable, high-performance job processing.

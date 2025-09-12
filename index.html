@@ -1,0 +1,697 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>📚 SK Tech Guide</title>
+    <script src="https://cdn.jsdelivr.net/npm/marked@4.3.0/marked.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background-color: #f8f9fa;
+            overflow-x: hidden;
+        }
+
+        .app {
+            display: flex;
+            height: 100vh;
+        }
+
+        /* Sidebar */
+        .sidebar {
+            width: 300px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            overflow-y: auto;
+            box-shadow: 2px 0 10px rgba(0,0,0,0.1);
+            position: relative;
+        }
+
+        .sidebar-header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid rgba(255,255,255,0.2);
+        }
+
+        .sidebar-header h1 {
+            font-size: 1.4em;
+            margin-bottom: 10px;
+        }
+
+        .sidebar-header p {
+            opacity: 0.8;
+            font-size: 0.9em;
+        }
+
+        .file-list {
+            list-style: none;
+        }
+
+        .file-item {
+            margin: 8px 0;
+            cursor: pointer;
+            padding: 12px 15px;
+            border-radius: 8px;
+            transition: all 0.3s ease;
+            background: rgba(255,255,255,0.1);
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+
+        .file-item:hover {
+            background: rgba(255,255,255,0.2);
+            transform: translateX(5px);
+        }
+
+        .file-item.active {
+            background: rgba(255,255,255,0.3);
+            border-color: rgba(255,255,255,0.5);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+        }
+
+        .file-item .emoji {
+            font-size: 1.1em;
+            margin-right: 10px;
+        }
+
+        .file-item .title {
+            font-weight: 500;
+            display: block;
+        }
+
+        .file-item .description {
+            font-size: 0.8em;
+            opacity: 0.8;
+            margin-top: 2px;
+        }
+
+        /* Main Content */
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .content-header {
+            background: white;
+            padding: 20px 30px;
+            border-bottom: 1px solid #dee2e6;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .content-title {
+            font-size: 1.8em;
+            color: #333;
+            margin: 0;
+        }
+
+        .content-subtitle {
+            color: #666;
+            margin: 5px 0 0 0;
+            font-size: 0.9em;
+        }
+
+        .search-container {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .search-input {
+            padding: 8px 12px;
+            border: 2px solid #ddd;
+            border-radius: 20px;
+            font-size: 14px;
+            width: 250px;
+            transition: border-color 0.3s;
+        }
+
+        .search-input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .search-btn {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background 0.3s;
+        }
+
+        .search-btn:hover {
+            background: #5a67d8;
+        }
+
+        .content-area {
+            flex: 1;
+            overflow-y: auto;
+            padding: 30px;
+            background: white;
+        }
+
+        .markdown-content {
+            max-width: 100%;
+            line-height: 1.7;
+        }
+
+        /* Markdown Styling */
+        .markdown-content h1 {
+            color: #333;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 3px solid #667eea;
+            font-size: 2.2em;
+        }
+
+        .markdown-content h2 {
+            color: #333;
+            margin: 40px 0 20px 0;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #667eea;
+            font-size: 1.6em;
+        }
+
+        .markdown-content h3 {
+            color: #444;
+            margin: 30px 0 15px 0;
+            font-size: 1.3em;
+        }
+
+        .markdown-content h4 {
+            color: #555;
+            margin: 20px 0 10px 0;
+            font-size: 1.1em;
+        }
+
+        .markdown-content p {
+            margin-bottom: 15px;
+            color: #444;
+        }
+
+        .markdown-content ul, .markdown-content ol {
+            margin: 15px 0;
+            padding-left: 30px;
+        }
+
+        .markdown-content li {
+            margin: 8px 0;
+            color: #444;
+        }
+
+        .markdown-content blockquote {
+            border-left: 4px solid #667eea;
+            padding: 15px 20px;
+            margin: 20px 0;
+            background: #f8f9fa;
+            border-radius: 0 4px 4px 0;
+        }
+
+        .markdown-content code {
+            background: #f1f3f4;
+            color: #d73a49;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            font-size: 0.9em;
+        }
+
+        .markdown-content pre {
+            background: #2d3748;
+            color: #e2e8f0;
+            padding: 20px;
+            border-radius: 8px;
+            overflow-x: auto;
+            margin: 20px 0;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            font-size: 14px;
+            line-height: 1.5;
+            position: relative;
+        }
+
+        .markdown-content pre code {
+            background: none;
+            color: inherit;
+            padding: 0;
+        }
+
+        .markdown-content table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .markdown-content th, .markdown-content td {
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+
+        .markdown-content th {
+            background: #667eea;
+            color: white;
+            font-weight: 600;
+        }
+
+        .markdown-content tr:nth-child(even) {
+            background: #f8f9fa;
+        }
+
+        .markdown-content tr:hover {
+            background: #e3f2fd;
+        }
+
+        .markdown-content .toc {
+            background: #f8f9fa;
+            border-left: 4px solid #667eea;
+            padding: 20px;
+            margin-bottom: 30px;
+            border-radius: 0 4px 4px 0;
+        }
+
+        .markdown-content .toc h2 {
+            color: #333;
+            margin-bottom: 15px;
+            font-size: 1.4em;
+        }
+
+        .markdown-content .toc ul {
+            list-style: none;
+            padding-left: 0;
+        }
+
+        .markdown-content .toc li {
+            margin: 8px 0;
+        }
+
+        .markdown-content .toc a {
+            color: #667eea;
+            text-decoration: none;
+            font-weight: 500;
+            transition: color 0.3s;
+        }
+
+        .markdown-content .toc a:hover {
+            color: #5a67d8;
+            text-decoration: underline;
+        }
+
+        /* Loading and Error States */
+        .loading {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 200px;
+            font-size: 1.2em;
+            color: #666;
+        }
+
+        .error {
+            background: #fee;
+            border: 1px solid #fcc;
+            color: #c33;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+
+        /* Responsive Design */
+        @media (max-width: 768px) {
+            .app {
+                flex-direction: column;
+                height: auto;
+            }
+
+            .sidebar {
+                width: 100%;
+                height: auto;
+                position: relative;
+            }
+
+            .content-header {
+                padding: 15px 20px;
+                flex-direction: column;
+                gap: 15px;
+                align-items: flex-start;
+            }
+
+            .content-title {
+                font-size: 1.5em;
+            }
+
+            .search-input {
+                width: 200px;
+            }
+
+            .content-area {
+                padding: 20px;
+            }
+
+            .markdown-content h1 {
+                font-size: 1.8em;
+            }
+
+            .markdown-content h2 {
+                font-size: 1.4em;
+            }
+        }
+
+        /* Scroll to top button */
+        .scroll-to-top {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            cursor: pointer;
+            opacity: 0.8;
+            transition: opacity 0.3s;
+            z-index: 1000;
+        }
+
+        .scroll-to-top:hover {
+            opacity: 1;
+        }
+
+        /* Copy button for code blocks */
+        .copy-btn {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(255,255,255,0.2);
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        pre:hover .copy-btn {
+            opacity: 1;
+        }
+
+        /* Highlight search results */
+        .highlight {
+            background: #fff3cd;
+            padding: 2px 4px;
+            border-radius: 2px;
+        }
+    </style>
+</head>
+<body>
+    <div class="app">
+        <!-- Sidebar -->
+        <div class="sidebar">
+            <div class="sidebar-header">
+                <h1>📚 Documentation</h1>
+                <p>SK Tech Guide</p>
+            </div>
+
+            <ul class="file-list" id="file-list">
+                <li class="file-item" data-file="docker">
+                    <span class="emoji">🐳</span>
+                    <span class="title">Docker Commands</span>
+                    <span class="description">Containerization commands guide</span>
+                </li>
+                <li class="file-item" data-file="mongoose">
+                    <span class="emoji">🐱</span>
+                    <span class="title">Mongoose ORM</span>
+                    <span class="description">MongoDB ODM for Node.js</span>
+                </li>
+                <li class="file-item" data-file="prisma">
+                    <span class="emoji">🗄️</span>
+                    <span class="title">Prisma ORM</span>
+                    <span class="description">Type-safe database operations</span>
+                </li>
+                <li class="file-item active" data-file="redis">
+                    <span class="emoji">⚡</span>
+                    <span class="title">Redis Deep Dive</span>
+                    <span class="description">Complete Redis technical guide</span>
+                </li>
+                <li class="file-item" data-file="bullmq">
+                    <span class="emoji">🚀</span>
+                    <span class="title">BullMQ Implementation</span>
+                    <span class="description">Redis-based job queue system</span>
+                </li>
+                <li class="file-item" data-file="rabbitmq">
+                    <span class="emoji">🐰</span>
+                    <span class="title">RabbitMQ Guide</span>
+                    <span class="description">Message broker implementation</span>
+                </li>
+            </ul>
+        </div>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <div class="content-header">
+                <div>
+                    <h1 class="content-title" id="doc-title">Redis Deep Dive</h1>
+                    <p class="content-subtitle" id="doc-subtitle">Complete Redis</p>
+                </div>
+            </div>
+
+            <div class="content-area">
+                <div id="markdown-content" class="markdown-content">
+                    <div class="loading">Loading documentation...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <button class="scroll-to-top" onclick="scrollToTop()" title="Scroll to top" style="display: none;">↑</button>
+
+    <script>
+        // Configuration
+        const DOCS_CONFIG = {
+            'docker': {
+                title: 'Docker & Docker Compose Commands Guide',
+                subtitle: 'Essential commands and examples',
+                file: 'DOCKER_COMMANDS_GUIDE.md'
+            },
+            'mongoose': {
+                title: 'Mongoose ORM Complete Guide',
+                subtitle: 'Comprehensive guide to Mongoose ODM for MongoDB',
+                file: 'MONGOOSE_DETAILED_EXPLANATION.md'
+            },
+            'prisma': {
+                title: 'Prisma ORM Deep Dive',
+                subtitle: 'Comprehensive guide to Prisma ORM',
+                file: 'PRISMA_DETAILED_EXPLANATION.md'
+            },
+            'redis': {
+                title: 'Redis Deep Dive',
+                subtitle: 'Comprehensive guide to Redis',
+                file: 'REDIS_DETAILED_EXPLANATION.md'
+            },
+            'bullmq': {
+                title: 'BullMQ Complete Technical Guide',
+                subtitle: 'Comprehensive guide to BullMQ concepts and implementation',
+                file: 'BULLMQ_DETAILED_EXPLANATION.md'
+            },
+            'rabbitmq': {
+                title: 'RabbitMQ Implementation',
+                subtitle: 'Comprehensive guide to RabbitMQ concepts and implementation',
+                file: 'RABBITMQ_DETAILED_EXPLANATION.md'
+            }
+        };
+
+        // Initialize marked with custom renderer
+        marked.setOptions({
+            highlight: function(code, lang) {
+                // Simple syntax highlighting for common languages
+                if (lang === 'bash' || lang === 'sh') {
+                    return code.replace(/(#.*$)/gm, '<span style="color: #6a737d;">$1</span>')
+                              .replace(/(\$\w+)/g, '<span style="color: #005cc5;">$1</span>')
+                              .replace(/(docker|npm|node|redis-cli|psql)/g, '<span style="color: #d73a49; font-weight: bold;">$1</span>');
+                }
+                return code;
+            },
+            breaks: true,
+            gfm: true
+        });
+
+        // Custom renderer for better styling
+        const renderer = new marked.Renderer();
+
+        // Override link rendering for better UX
+        renderer.link = function(href, title, text) {
+            const titleAttr = title ? ` title="${title}"` : '';
+            if (href.startsWith('#')) {
+                return `<a href="${href}"${titleAttr} onclick="scrollToAnchor('${href.substring(1)}')">${text}</a>`;
+            }
+            return `<a href="${href}"${titleAttr} target="_blank" rel="noopener">${text}</a>`;
+        };
+
+        // Override code block rendering to add copy button
+        renderer.code = function(code, language, escaped) {
+            const copyBtn = '<button class="copy-btn" onclick="copyToClipboard(this.previousElementSibling)">📋 Copy</button>';
+            return `<pre><code class="language-${language || 'text'}">${code}</code>${copyBtn}</pre>`;
+        };
+
+        marked.setOptions({ renderer });
+
+        // Global variables
+        let currentFile = 'redis';
+        let currentMarkdown = '';
+
+        // Initialize the app
+        document.addEventListener('DOMContentLoaded', async function() {
+            await loadMarkdownFile(currentFile);
+            setupEventListeners();
+        });
+
+        // Setup event listeners
+        function setupEventListeners() {
+            // File selection
+            document.querySelectorAll('.file-item').forEach(item => {
+                item.addEventListener('click', async function() {
+                    const fileName = this.dataset.file;
+                    await loadMarkdownFile(fileName);
+                });
+            });
+
+            // Scroll to top visibility
+            window.addEventListener('scroll', function() {
+                const scrollBtn = document.querySelector('.scroll-to-top');
+                if (window.pageYOffset > 300) {
+                    scrollBtn.style.display = 'block';
+                } else {
+                    scrollBtn.style.display = 'none';
+                }
+            });
+        }
+
+        // Load markdown file dynamically
+        async function loadMarkdownFile(fileName) {
+            try {
+                // Update UI
+                document.querySelectorAll('.file-item').forEach(item => {
+                    item.classList.remove('active');
+                });
+                document.querySelector(`[data-file="${fileName}"]`).classList.add('active');
+
+                // Update header
+                const config = DOCS_CONFIG[fileName];
+                document.getElementById('doc-title').textContent = config.title;
+                document.getElementById('doc-subtitle').textContent = config.subtitle;
+
+                // Show loading
+                const contentDiv = document.getElementById('markdown-content');
+                contentDiv.innerHTML = '<div class="loading">Loading documentation...</div>';
+
+                // Fetch markdown file
+                const response = await fetch(`./${config.file}`);
+                if (!response.ok) {
+                    throw new Error(`Failed to load ${config.file}: ${response.statusText}`);
+                }
+
+                const markdown = await response.text();
+
+                if (!markdown) {
+                    throw new Error(`Documentation file ${config.file} is empty or not found`);
+                }
+
+                currentMarkdown = markdown;
+
+                // Render markdown
+                const html = marked.parse(markdown);
+                contentDiv.innerHTML = html;
+
+                // Update page title
+                document.title = `📚 ${config.title} - Documentation`;
+
+                // Scroll to top
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+
+            } catch (error) {
+                console.error('Error loading markdown:', error);
+                document.getElementById('markdown-content').innerHTML =
+                    `<div class="error">
+                        <h3>❌ Error Loading Documentation</h3>
+                        <p>Could not load ${fileName} documentation.</p>
+                        <p>Error: ${error.message}</p>
+                        <p>Make sure the .md files are in the same directory as this HTML file.</p>
+                    </div>`;
+            }
+        }
+
+        // Scroll to anchor
+        function scrollToAnchor(anchorId) {
+            const element = document.getElementById(anchorId);
+            if (element) {
+                element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+        }
+
+        // Scroll to top
+        function scrollToTop() {
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        // Copy to clipboard
+        function copyToClipboard(codeElement) {
+            const text = codeElement.textContent || codeElement.innerText;
+            navigator.clipboard.writeText(text).then(function() {
+                // Show feedback
+                const btn = codeElement.nextElementSibling;
+                const originalText = btn.textContent;
+                btn.textContent = '✅ Copied!';
+                btn.style.background = '#4caf50';
+
+                setTimeout(() => {
+                    btn.textContent = originalText;
+                    btn.style.background = 'rgba(255,255,255,0.2)';
+                }, 2000);
+            }).catch(function(err) {
+                console.error('Failed to copy: ', err);
+            });
+        }
+
+        // Make tables responsive
+        function makeTablesResponsive() {
+            const tables = document.querySelectorAll('table');
+            tables.forEach(table => {
+                const wrapper = document.createElement('div');
+                wrapper.style.overflowX = 'auto';
+                wrapper.style.margin = '20px 0';
+                table.parentNode.insertBefore(wrapper, table);
+                wrapper.appendChild(table);
+            });
+        }
+
+        // Add table responsiveness after content loads
+        const originalLoadFunction = loadMarkdownFile;
+        loadMarkdownFile = async function(fileName) {
+            await originalLoadFunction(fileName);
+            setTimeout(makeTablesResponsive, 100);
+        };
+    </script>
+</body>
+</html>
