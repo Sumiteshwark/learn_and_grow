@@ -6,16 +6,16 @@
 - [Schema Definition](#schema-definition)
 - [Data Modeling](#data-modeling)
 - [Database Migrations](#database-migrations)
-- [Client API & Queries](#client-api--queries)
-- [Relationships & Joins](#relationships--joins)
+- [Client API and Queries](#client-api-and-queries)
+- [Relationships and Joins](#relationships-and-joins)
 - [Advanced Querying](#advanced-querying)
-- [Transactions & ACID](#transactions--acid)
+- [Transactions and ACID](#transactions-and-acid)
 - [Performance Optimization](#performance-optimization)
 - [Caching Strategies](#caching-strategies)
 - [Error Handling](#error-handling)
 - [Production Deployment](#production-deployment)
 - [Migration Strategies](#migration-strategies)
-- [Monitoring & Observability](#monitoring--observability)
+- [Monitoring and Observability](#monitoring-and-observability)
 - [Troubleshooting Guide](#troubleshooting-guide)
 - [Best Practices](#best-practices)
 - [Prisma vs Other ORMs](#prisma-vs-other-orms)
@@ -393,7 +393,7 @@ const rollback = async () => {
 
 ---
 
-## 🔍 **Client API & Queries**
+## 🔍 **Client API and Queries**
 
 ### **Basic CRUD Operations:**
 ```typescript
@@ -478,7 +478,7 @@ const complexResult = await prisma.$queryRaw`
 
 ---
 
-## 🔗 **Relationships & Joins**
+## 🔗 **Relationships and Joins**
 
 ### **Eager Loading (include):**
 ```typescript
@@ -660,7 +660,7 @@ await prisma.$executeRaw`
 
 ---
 
-## 🔐 **Transactions & ACID**
+## 🔐 **Transactions and ACID**
 
 ### **Implicit Transactions:**
 ```typescript
@@ -1147,7 +1147,7 @@ const rollbackMigration = async () => {
 
 ---
 
-## 📊 **Monitoring & Observability**
+## 📊 **Monitoring and Observability**
 
 ### **Query Performance Monitoring:**
 ```typescript

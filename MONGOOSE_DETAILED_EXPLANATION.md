@@ -3,7 +3,7 @@
 ## 📋 **Table of Contents**
 - [What is Mongoose?](#what-is-mongoose)
 - [Why Use Mongoose?](#why-use-mongoose)
-- [Installation & Setup](#installation--setup)
+- [Installation and Setup](#installation-and-setup)
 - [Core Concepts](#core-concepts)
 - [Schema Definition](#schema-definition)
 - [Model Creation](#model-creation)
@@ -120,7 +120,7 @@ if (user) {
 
 ---
 
-## 📦 **Installation & Setup**
+## 📦 **Installation and Setup**
 
 ### **Basic Installation:**
 ```bash

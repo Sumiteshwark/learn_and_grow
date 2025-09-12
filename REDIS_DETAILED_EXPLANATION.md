@@ -3,13 +3,13 @@
 ## 📋 **Table of Contents**
 - [What is Redis?](#what-is-redis)
 - [Redis in Sentinel](#redis-in-sentinel)
-- [Data Types & Commands](#data-types--commands)
-- [Persistence & Durability](#persistence--durability)
+- [Data Types and Commands](#data-types-and-commands)
+- [Persistence and Durability](#persistence-and-durability)
 - [Memory Management](#memory-management)
-- [Replication & Clustering](#replication--clustering)
+- [Replication and Clustering](#replication-and-clustering)
 - [Performance Optimization](#performance-optimization)
 - [Security Best Practices](#security-best-practices)
-- [Monitoring & Troubleshooting](#monitoring--troubleshooting)
+- [Monitoring and Troubleshooting](#monitoring-and-troubleshooting)
 - [Production Deployment](#production-deployment)
 - [Redis vs Other Databases](#redis-vs-other-databases)
 - [Advanced Features](#advanced-features)
@@ -76,7 +76,7 @@ redis.set('lock:resource-abc', 'worker-1', 'NX', 'EX', 30)
 
 ---
 
-## 📊 **Data Types & Commands**
+## 📊 **Data Types and Commands**
 
 ### **1. Strings (Most Common)**
 ```bash
@@ -206,7 +206,7 @@ GEODIST locations:restaurants "restaurant1" "restaurant2" km  # Distance: 1.2567
 
 ---
 
-## 💾 **Persistence & Durability**
+## 💾 **Persistence and Durability**
 
 ### **Persistence Strategies:**
 
@@ -349,7 +349,7 @@ MEMORY PURGE                      # Defragment memory
 
 ---
 
-## 🔄 **Replication & Clustering**
+## 🔄 **Replication and Clustering**
 
 ### **Master-Slave Replication:**
 
@@ -607,7 +607,7 @@ const keyRotation = {
 
 ---
 
-## 📊 **Monitoring & Troubleshooting**
+## 📊 **Monitoring and Troubleshooting**
 
 ### **Built-in Monitoring:**
 

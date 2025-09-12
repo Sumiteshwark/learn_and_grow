@@ -4,17 +4,17 @@
 - [What is RabbitMQ?](#what-is-rabbitmq)
 - [Why Use Message Queues?](#why-use-message-queues)
 - [RabbitMQ Architecture](#rabbitmq-architecture)
-- [Installation & Setup](#installation--setup)
+- [Installation and Setup](#installation-and-setup)
 - [Basic Concepts](#basic-concepts)
 - [Core API Methods and Terms](#core-api-methods-and-terms)
 - [Exchange Types](#exchange-types)
 - [Message Patterns](#message-patterns)
 - [Python Examples](#python-examples)
-- [Node.js Examples](#nodejs-examples)
+- [NodeJs Examples](#nodejs-examples)
 - [Java Examples](#java-examples)
 - [Advanced Features](#advanced-features)
 - [Performance Tuning](#performance-tuning)
-- [Monitoring & Management](#monitoring--management)
+- [Monitoring and Management](#monitoring-and-management)
 - [Production Deployment](#production-deployment)
 - [Troubleshooting](#troubleshooting)
 - [Best Practices](#best-practices)
@@ -156,7 +156,7 @@ def send_notification(user_id, message):
 
 ---
 
-## 🚀 **Installation & Setup**
+## 🚀 **Installation and Setup**
 
 ### **Docker Installation (Recommended for Learning)**
 ```bash
@@ -951,7 +951,7 @@ if __name__ == "__main__":
 
 ---
 
-## 🟨 **Node.js Examples**
+## 🟨 **NodeJs Examples**
 
 ### **Express.js with RabbitMQ**
 
@@ -1527,7 +1527,7 @@ channel.queue_declare(
 
 ---
 
-## 📊 **Monitoring & Management**
+## 📊 **Monitoring and Management**
 
 ### **Management API**
 ```python

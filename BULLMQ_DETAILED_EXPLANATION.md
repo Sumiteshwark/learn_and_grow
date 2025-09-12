@@ -1,5 +1,57 @@
 # 🚀 **BullMQ Complete Technical Guide**
 
+## 📋 **Table of Contents**
+- [What is BullMQ?](#what-is-bullmq)
+- [Why Choose BullMQ?](#why-choose-bullmq)
+- [Core API Methods and Terms](#core-api-methods-and-terms)
+- [Installation and Setup](#installation-and-setup)
+- [Core Concepts](#core-concepts)
+- [Basic Usage](#basic-usage)
+- [Advanced Features](#advanced-features)
+- [Job Management](#job-management)
+- [Worker Management](#worker-management)
+- [Error Handling and Retries](#error-handling-and-retries)
+- [Priority Queues](#priority-queues)
+- [Real-time Monitoring](#real-time-monitoring)
+- [Performance Optimization](#performance-optimization)
+- [Security Best Practices](#security-best-practices)
+- [Production Deployment](#production-deployment)
+- [Troubleshooting](#troubleshooting)
+- [Use Cases](#use-cases)
+- [Comparison with Alternatives](#comparison-with-alternatives)
+- [Best Practices](#best-practices)
+- [API Reference](#api-reference)
+
+---
+
+## 🤔 **What is BullMQ?**
+
+**BullMQ** is a modern, Redis-backed job queue library for Node.js applications that provides advanced job management, real-time monitoring, and fault tolerance. It's the successor to the popular Bull library, built specifically for modern JavaScript/TypeScript applications.
+
+### **Key Characteristics:**
+- ✅ **Redis-Backed**: Uses Redis for job storage and state management
+- ✅ **TypeScript Support**: Full type safety and IntelliSense support
+- ✅ **Advanced Job Management**: Priorities, retries, scheduling, dead letter queues
+- ✅ **Real-time Monitoring**: Live job status updates and progress tracking
+- ✅ **Fault Tolerance**: Automatic recovery and distributed processing
+- ✅ **High Performance**: Optimized for high-throughput scenarios
+- ✅ **Production Ready**: Battle-tested in production environments
+
+### **Architecture Overview:**
+```
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│   Producers     │────│     Redis       │────│   Consumers     │
+│  (API, Services)│    │  (Job Storage)  │    │   (Workers)     │
+│                 │    │                 │    │                 │
+│ ┌─────────────┐ │    │ ┌─────────────┐ │    │ ┌─────────────┐ │
+│ │   Queues    │◄├───►│ │ Job States  │◄├───►│ │ Processing  │ │
+│ │             │ │    │ │             │ │    │ │             │ │
+│ └─────────────┘ │    │ └─────────────┘ │    │ └─────────────┘ │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
+```
+
+---
+
 ## 📖 **Theory & Concepts**
 
 ### **Background Theory**
@@ -460,59 +512,6 @@ const health = {
 - **Threshold Alerts**: Queue depth > threshold
 - **Error Alerts**: High failure rate
 - **Performance Alerts**: Slow processing times
-
----
-
-## 📋 **Table of Contents**
-- [What is BullMQ?](#what-is-bullmq)
-- [Why Choose BullMQ?](#why-choose-bullmq)
-- [Core API Methods and Terms](#core-api-methods-and-terms)
-- [Installation & Setup](#installation--setup)
-- [Core Concepts](#core-concepts)
-- [Basic Usage](#basic-usage)
-- [Advanced Features](#advanced-features)
-- [Job Management](#job-management)
-- [Worker Management](#worker-management)
-- [Error Handling & Retries](#error-handling--retries)
-- [Priority Queues](#priority-queues)
-- [Scheduling & Delayed Jobs](#scheduling--delayed-jobs)
-- [Real-time Monitoring](#real-time-monitoring)
-- [Performance Optimization](#performance-optimization)
-- [Security Best Practices](#security-best-practices)
-- [Production Deployment](#production-deployment)
-- [Troubleshooting](#troubleshooting)
-- [Use Cases](#use-cases)
-- [Comparison with Alternatives](#comparison-with-alternatives)
-- [Best Practices](#best-practices)
-- [API Reference](#api-reference)
-
----
-
-## 🤔 **What is BullMQ?**
-
-**BullMQ** is a modern, Redis-backed job queue library for Node.js applications that provides advanced job management, real-time monitoring, and fault tolerance. It's the successor to the popular Bull library, built specifically for modern JavaScript/TypeScript applications.
-
-### **Key Characteristics:**
-- ✅ **Redis-Backed**: Uses Redis for job storage and state management
-- ✅ **TypeScript Support**: Full type safety and IntelliSense support
-- ✅ **Advanced Job Management**: Priorities, retries, scheduling, dead letter queues
-- ✅ **Real-time Monitoring**: Live job status updates and progress tracking
-- ✅ **Fault Tolerance**: Automatic recovery and distributed processing
-- ✅ **High Performance**: Optimized for high-throughput scenarios
-- ✅ **Production Ready**: Battle-tested in production environments
-
-### **Architecture Overview:**
-```
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   Producers     │────│     Redis       │────│   Consumers     │
-│  (API, Services)│    │  (Job Storage)  │    │   (Workers)     │
-│                 │    │                 │    │                 │
-│ ┌─────────────┐ │    │ ┌─────────────┐ │    │ ┌─────────────┐ │
-│ │   Queues    │◄├───►│ │ Job States  │◄├───►│ │ Processing  │ │
-│ │             │ │    │ │             │ │    │ │             │ │
-│ └─────────────┘ │    │ └─────────────┘ │    │ └─────────────┘ │
-└─────────────────┘    └─────────────────┘    └─────────────────┘
-```
 
 ---
 
@@ -1181,7 +1180,7 @@ const retryProcessor = async (job) => {
 
 ---
 
-## 📦 **Installation & Setup**
+## 📦 **Installation and Setup**
 
 ### **Basic Installation:**
 ```bash
@@ -1694,7 +1693,7 @@ await worker.close();
 
 ---
 
-## 🚨 **Error Handling & Retries**
+## 🚨 **Error Handling and Retries**
 
 ### **Basic Retry Configuration:**
 ```typescript

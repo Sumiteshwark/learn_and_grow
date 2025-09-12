@@ -544,9 +544,15 @@
         renderer.link = function(href, title, text) {
             const titleAttr = title ? ` title="${title}"` : '';
             if (href.startsWith('#')) {
-                return `<a href="${href}"${titleAttr} onclick="scrollToAnchor('${href.substring(1)}')">${text}</a>`;
+                return `<a href="${href}"${titleAttr} onclick="scrollToAnchor('${href.substring(1)}'); return false;">${text}</a>`;
             }
             return `<a href="${href}"${titleAttr} target="_blank" rel="noopener">${text}</a>`;
+        };
+
+        // Override heading rendering to ensure IDs are present
+        renderer.heading = function(text, level, raw) {
+            const id = raw.toLowerCase().replace(/[^\w]+/g, '-').replace(/^-+|-+$/g, '');
+            return `<h${level} id="${id}">${text}</h${level}>`;
         };
 
         // Override code block rendering to add copy button
