@@ -435,10 +435,25 @@
             </div>
 
             <ul class="file-list" id="file-list">
+                <li class="file-item" data-file="linux">
+                    <span class="emoji">🐧</span>
+                    <span class="title">Linux CLI & Shell</span>
+                    <span class="description">Complete Linux command guide</span>
+                </li>
+                <li class="file-item" data-file="networking">
+                    <span class="emoji">🌐</span>
+                    <span class="title">Networking Basics</span>
+                    <span class="description">Complete networking guide</span>
+                </li>
                 <li class="file-item" data-file="docker">
                     <span class="emoji">🐳</span>
                     <span class="title">Docker Commands</span>
                     <span class="description">Containerization commands guide</span>
+                </li>
+                <li class="file-item" data-file="orchestration">
+                    <span class="emoji">☸️</span>
+                    <span class="title">Container Orchestration</span>
+                    <span class="description">Kubernetes & orchestration guide</span>
                 </li>
                 <li class="file-item" data-file="terraform">
                     <span class="emoji">🏗️</span>
@@ -495,10 +510,25 @@
     <script>
         // Configuration
         const DOCS_CONFIG = {
+            'linux': {
+                title: 'Linux CLI & Shell Scripting',
+                subtitle: 'Complete guide to Linux commands and shell scripting',
+                file: 'LINUX_OVERVIEW.md'
+            },
+            'networking': {
+                title: 'Networking Basics',
+                subtitle: 'Complete guide to computer networking fundamentals',
+                file: 'NETWORKING_OVERVIEW.md'
+            },
             'docker': {
                 title: 'Docker & Docker Compose Commands Guide',
                 subtitle: 'Essential commands and examples',
                 file: 'DOCKER_COMMANDS_GUIDE.md'
+            },
+            'orchestration': {
+                title: 'Container Orchestration',
+                subtitle: 'Complete guide to Kubernetes and container orchestration',
+                file: 'CONTAINER_ORCHESTRATION_OVERVIEW.md'
             },
             'terraform': {
                 title: 'Terraform Deep Dive',
