@@ -435,10 +435,15 @@
             </div>
 
             <ul class="file-list" id="file-list">
-                <li class="file-item" data-file="linux">
+                <li class="file-item active" data-file="linux">
                     <span class="emoji">🐧</span>
                     <span class="title">Linux CLI & Shell</span>
                     <span class="description">Complete Linux command guide</span>
+                </li>
+                <li class="file-item" data-file="vim">
+                    <span class="emoji">✏️</span>
+                    <span class="title">Vim Essential Commands</span>
+                    <span class="description">Complete guide to Vim editor commands</span>
                 </li>
                 <li class="file-item" data-file="networking">
                     <span class="emoji">🌐</span>
@@ -475,7 +480,7 @@
                     <span class="title">Prisma ORM</span>
                     <span class="description">Type-safe database operations</span>
                 </li>
-                <li class="file-item active" data-file="redis">
+                <li class="file-item" data-file="redis">
                     <span class="emoji">⚡</span>
                     <span class="title">Redis Deep Dive</span>
                     <span class="description">Complete Redis technical guide</span>
@@ -519,6 +524,11 @@
                 title: 'Linux CLI & Shell Scripting',
                 subtitle: 'Complete guide to Linux commands and shell scripting',
                 file: 'LINUX_OVERVIEW.md'
+            },
+            'vim': {
+                title: 'Vim Essential Commands',
+                subtitle: 'Complete guide to Vim editor commands and workflow',
+                file: 'VIM_ESSENTIAL_COMMANDS.md'
             },
             'networking': {
                 title: 'Networking Basics',
@@ -614,7 +624,7 @@
         marked.setOptions({ renderer });
 
         // Global variables
-        let currentFile = 'redis';
+        let currentFile = 'linux';
         let currentMarkdown = '';
 
         // Initialize the app
