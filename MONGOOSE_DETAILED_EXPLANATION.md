@@ -1,3 +1,8 @@
+**Last Updated:** November 2025  
+**Author:** SUMITESHWAR KUMAR
+
+---
+
 # 🐱 **Mongoose ORM Complete Guide: From Beginner to Advanced**
 
 ## 📋 **Table of Contents**

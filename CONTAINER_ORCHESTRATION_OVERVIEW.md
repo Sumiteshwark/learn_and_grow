@@ -1,4 +1,9 @@
-# Container Orchestration Concepts - Complete Guide
+**Last Updated:** November 2025  
+**Author:** SUMITESHWAR KUMAR
+
+---
+
+# **Container Orchestration Concepts - Complete Guide**
 
 ## Table of Contents
 1. [Introduction to Container Orchestration](#introduction-to-container-orchestration)

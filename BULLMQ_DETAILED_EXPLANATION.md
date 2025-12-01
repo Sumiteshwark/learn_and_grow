@@ -1,3 +1,8 @@
+**Last Updated:** November 2025  
+**Author:** SUMITESHWAR KUMAR
+
+---
+
 # 🚀 **BullMQ Complete Technical Guide**
 
 ## 📋 **Table of Contents**

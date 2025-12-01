@@ -1,3 +1,8 @@
+**Last Updated:** November 2025  
+**Author:** SUMITESHWAR KUMAR
+
+---
+
 # 🚀 **Terraform Deep Dive - Complete Infrastructure as Code Guide**
 
 ## 📋 **Table of Contents**

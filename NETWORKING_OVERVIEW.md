@@ -1,4 +1,9 @@
-# Networking Basics - Complete Guide
+**Last Updated:** November 2025  
+**Author:** SUMITESHWAR KUMAR
+
+---
+
+#  **Networking Basics - Complete Guide**
 
 ## Table of Contents
 1. [Introduction to Computer Networks](#introduction-to-computer-networks)
@@ -6,13 +11,14 @@
 3. [IP Addressing](#ip-addressing)
 4. [Subnetting](#subnetting)
 5. [DNS (Domain Name System)](#dns-domain-name-system)
-6. [TCP/IP Protocol Suite](#tcpip-protocol-suite)
-7. [HTTP and HTTPS](#http-and-https)
-8. [Network Security](#network-security)
-9. [Network Troubleshooting](#network-troubleshooting)
-10. [Cloud Networking](#cloud-networking)
-11. [Container Networking](#container-networking)
-12. [Load Balancing](#load-balancing)
+6. [Server IP Configuration](#server-ip-configuration)
+7. [TCP/IP Protocol Suite](#tcpip-protocol-suite)
+8. [HTTP and HTTPS](#http-and-https)
+9. [Network Security](#network-security)
+10. [Network Troubleshooting](#network-troubleshooting)
+11. [Cloud Networking](#cloud-networking)
+12. [Container Networking](#container-networking)
+13. [Load Balancing](#load-balancing)
 
 ---
 
@@ -328,6 +334,232 @@ domain example.com
 ```
 
 ---
+
+## Server IP Configuration
+
+### Types of IP Addresses on a Server
+
+A server can have multiple types of IP addresses assigned to different network interfaces and for different purposes:
+
+#### 1. Primary IP Address (Main Interface)
+The main IP address assigned to the server's primary network interface (usually `eth0` or `enp0s3`).
+
+```bash
+# Linux commands to get primary IP
+ip addr show eth0                    # Show specific interface
+ip route get 8.8.8.8 | awk '{print $5; exit}'  # Get default interface IP
+hostname -I | awk '{print $1}'       # Get primary IP (first one)
+```
+
+#### 2. Loopback IP Address (127.0.0.1)
+The local loopback interface used for internal communication within the server.
+
+```bash
+# Check loopback interface
+ip addr show lo
+# Output: inet 127.0.0.1/8 scope host lo
+
+# Test loopback connectivity
+ping -c 3 127.0.0.1
+curl http://127.0.0.1:80  # If web server is running locally
+```
+
+#### 3. Private IP Addresses
+Internal network IP addresses used for communication within private networks.
+
+```bash
+# Common private IP ranges:
+# 10.0.0.0/8     (10.0.0.0 - 10.255.255.255)
+# 172.16.0.0/12  (172.16.0.0 - 172.31.255.255)
+# 192.168.0.0/16 (192.168.0.0 - 192.168.255.255)
+
+# Get all private IPs on server
+ip addr show | grep -E "inet (10\.|172\.|192\.168\.)" | awk '{print $2}'
+```
+
+#### 4. Public IP Address
+The external IP address visible to the internet (if the server has direct internet access).
+
+```bash
+# Get public IP using external services
+curl -s https://api.ipify.org           # Get public IPv4
+curl -s https://api64.ipify.org         # Get public IPv6
+curl -s https://ipinfo.io/ip            # Alternative service
+curl -s https://icanhazip.com           # Another service
+
+# Using dig
+dig +short myip.opendns.com @resolver1.opendns.com
+```
+
+#### 5. IPv6 Addresses
+Modern IP addresses with much larger address space.
+
+```bash
+# Get IPv6 addresses
+ip -6 addr show
+ip addr show | grep inet6
+
+# Test IPv6 connectivity
+ping6 google.com
+curl -6 https://ipv6.google.com
+```
+
+#### 6. Virtual IP Addresses (VIP)
+IP addresses that can be moved between servers for high availability.
+
+```bash
+# Check for virtual IPs (often used with keepalived/heartbeat)
+ip addr show | grep -i virtual
+ip addr show | grep secondary
+
+# Common in HA setups
+# VIP: 192.168.1.100 (moves between servers)
+```
+
+#### 7. Link-Local Addresses (169.254.x.x)
+Automatic private IP addresses assigned when DHCP fails (APIPA).
+
+```bash
+# Check for link-local addresses
+ip addr show | grep 169.254
+
+# These are assigned automatically when DHCP is not available
+# Range: 169.254.0.0/16
+```
+
+#### 8. Docker/Container IPs
+IP addresses assigned to Docker containers.
+
+```bash
+# Get Docker container IPs
+docker ps -q | xargs docker inspect --format '{{.Name}}: {{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}'
+
+# Get all container networks
+docker network ls
+docker network inspect bridge
+
+# Specific container IP
+docker inspect container_name | grep -A 10 "Networks"
+```
+
+#### 9. Kubernetes Pod IPs
+IP addresses assigned to Kubernetes pods.
+
+```bash
+# Get pod IPs
+kubectl get pods -o wide
+kubectl get pods -o jsonpath='{.items[*].status.podIP}'
+
+# Get service cluster IPs
+kubectl get services -o jsonpath='{.items[*].spec.clusterIP}'
+
+# Get node IPs
+kubectl get nodes -o jsonpath='{.items[*].status.addresses[?(@.type=="InternalIP")].address}'
+```
+
+### Advanced IP Configuration Commands
+
+#### Interface Configuration
+```bash
+# Show detailed interface information
+ip addr show eth0
+
+# Configure IP address temporarily
+sudo ip addr add 192.168.1.100/24 dev eth0
+
+# Remove IP address
+sudo ip addr del 192.168.1.100/24 dev eth0
+
+# Bring interface up/down
+sudo ip link set eth0 up
+sudo ip link set eth0 down
+```
+
+#### Routing Information
+```bash
+# Show routing table
+ip route show
+
+# Add default route
+sudo ip route add default via 192.168.1.1
+
+# Add specific route
+sudo ip route add 10.0.0.0/8 via 192.168.1.254
+```
+
+#### Network Statistics
+```bash
+# Interface statistics
+ip -s link show eth0
+
+# Network connections
+ss -tuln                    # TCP/UDP listening sockets
+ss -tulnp                   # With process information
+netstat -tuln              # Alternative command
+```
+
+#### DHCP Information
+```bash
+# Check DHCP lease information (Ubuntu/Debian)
+cat /var/lib/dhcp/dhclient.leases | grep -A 10 "lease {"
+
+# Check current DHCP status
+dhclient -v eth0
+
+# Release and renew DHCP lease
+sudo dhclient -r eth0
+sudo dhclient eth0
+```
+
+#### NetworkManager (if used)
+```bash
+# List connections
+nmcli connection show
+
+# Show connection details
+nmcli connection show "Wired connection 1"
+
+# Get IP information via NetworkManager
+nmcli device show eth0
+```
+
+### Troubleshooting IP Configuration
+
+```bash
+# Check if interface is up
+ip link show eth0 | grep "state UP"
+
+# Test local connectivity
+ping -c 3 127.0.0.1
+
+# Test gateway connectivity
+ping -c 3 $(ip route show default | awk '{print $3}')
+
+# Test DNS resolution
+nslookup google.com
+
+# Check network service status
+systemctl status NetworkManager
+systemctl status networking
+
+# Restart network services
+sudo systemctl restart NetworkManager
+sudo systemctl restart networking
+```
+
+### Best Practices for IP Configuration
+
+1. **Use Static IPs for Servers**: Avoid DHCP for production servers
+2. **Document IP Assignments**: Keep track of all assigned IPs
+3. **Use Private IPs Internally**: Reserve public IPs only when needed
+4. **Implement IP Management**: Use IPAM tools for large networks
+5. **Regular IP Audits**: Periodically check and document IP usage
+6. **Backup Configurations**: Save network configuration files
+7. **Monitor IP Changes**: Use monitoring tools to detect IP changes
+
+---
+
+## Subnetting
 
 ## TCP/IP Protocol Suite
 

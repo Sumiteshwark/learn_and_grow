@@ -1,3 +1,8 @@
+**Last Updated:** November 2025  
+**Author:** SUMITESHWAR KUMAR
+
+---
+
 # 🐰 **RabbitMQ Complete Guide: From Beginner to Advanced**
 
 ## 📋 **Table of Contents**

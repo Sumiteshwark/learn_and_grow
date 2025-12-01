@@ -1,4 +1,9 @@
-# Linux CLI and Shell Scripting - Complete Guide
+**Last Updated:** November 2025  
+**Author:** SUMITESHWAR KUMAR
+
+---
+
+# **Linux CLI and Shell Scripting - Complete Guide**
 
 ## Table of Contents
 1. [Introduction to Linux](#introduction-to-linux)
