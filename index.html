@@ -435,7 +435,12 @@
             </div>
 
             <ul class="file-list" id="file-list">
-                <li class="file-item active" data-file="linux">
+                <li class="file-item active" data-file="golang">
+                    <span class="emoji">🧵</span>
+                    <span class="title">Go Concurrency Terms</span>
+                    <span class="description">Comprehensive Go concurrency guide</span>
+                </li>
+                <li class="file-item" data-file="linux">
                     <span class="emoji">🐧</span>
                     <span class="title">Linux CLI & Shell</span>
                     <span class="description">Complete Linux command guide</span>
@@ -520,6 +525,11 @@
     <script>
         // Configuration
         const DOCS_CONFIG = {
+            'golang': {
+                title: 'Go Concurrency Terms Cheat Sheet',
+                subtitle: 'Comprehensive guide to Go concurrency concepts and patterns',
+                file: 'GO_CONCURRENCY_TERMS.md'
+            },
             'linux': {
                 title: 'Linux CLI & Shell Scripting',
                 subtitle: 'Complete guide to Linux commands and shell scripting',
@@ -624,7 +634,7 @@
         marked.setOptions({ renderer });
 
         // Global variables
-        let currentFile = 'linux';
+        let currentFile = 'golang';
         let currentMarkdown = '';
 
         // Initialize the app
