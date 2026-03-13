@@ -1,3 +1,8 @@
+**Last Updated:** November 2025  
+**Author:** SUMITESHWAR KUMAR
+
+---
+
 # Claude Code CLI — Complete Cheatsheet
 
 > A quick-reference guide for all important Claude Code commands and shortcuts.
