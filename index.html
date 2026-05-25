@@ -335,17 +335,125 @@
             margin: 20px 0;
         }
 
+        /* Mobile-only top bar (hidden on desktop) */
+        .mobile-topbar {
+            display: none;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 16px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+            position: sticky;
+            top: 0;
+            z-index: 50;
+        }
+
+        .menu-toggle {
+            background: rgba(255, 255, 255, 0.15);
+            border: 1px solid rgba(255, 255, 255, 0.25);
+            color: white;
+            width: 40px;
+            height: 40px;
+            border-radius: 8px;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            transition: background 0.2s ease;
+        }
+
+        .menu-toggle:hover,
+        .menu-toggle:focus {
+            background: rgba(255, 255, 255, 0.3);
+            outline: none;
+        }
+
+        .menu-toggle .bars {
+            display: inline-flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .menu-toggle .bars span {
+            width: 20px;
+            height: 2px;
+            background: white;
+            border-radius: 2px;
+            transition: transform 0.25s ease, opacity 0.25s ease;
+        }
+
+        body.drawer-open .menu-toggle .bars span:nth-child(1) {
+            transform: translateY(6px) rotate(45deg);
+        }
+
+        body.drawer-open .menu-toggle .bars span:nth-child(2) {
+            opacity: 0;
+        }
+
+        body.drawer-open .menu-toggle .bars span:nth-child(3) {
+            transform: translateY(-6px) rotate(-45deg);
+        }
+
+        .mobile-topbar-title {
+            font-size: 1em;
+            font-weight: 600;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            flex: 1;
+        }
+
+        /* Backdrop behind the drawer */
+        .drawer-backdrop {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 90;
+            opacity: 0;
+            transition: opacity 0.25s ease;
+        }
+
+        body.drawer-open .drawer-backdrop {
+            display: block;
+            opacity: 1;
+        }
+
         /* Responsive Design */
         @media (max-width: 768px) {
+            .mobile-topbar {
+                display: flex;
+            }
+
             .app {
                 flex-direction: column;
                 height: auto;
             }
 
+            /* Sidebar becomes off-canvas drawer on mobile */
             .sidebar {
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 82%;
+                max-width: 320px;
+                height: 100vh;
+                transform: translateX(-100%);
+                transition: transform 0.28s ease;
+                z-index: 100;
+                padding-top: 20px;
+                overflow-y: auto;
+                -webkit-overflow-scrolling: touch;
+            }
+
+            body.drawer-open .sidebar {
+                transform: translateX(0);
+            }
+
+            .main-content {
                 width: 100%;
-                height: auto;
-                position: relative;
             }
 
             .content-header {
@@ -373,6 +481,11 @@
 
             .markdown-content h2 {
                 font-size: 1.4em;
+            }
+
+            /* Prevent body scroll when drawer is open */
+            body.drawer-open {
+                overflow: hidden;
             }
         }
 
@@ -426,9 +539,24 @@
     </style>
 </head>
 <body>
+    <!-- Mobile top bar with hamburger toggle -->
+    <header class="mobile-topbar">
+        <button class="menu-toggle" id="menu-toggle" aria-label="Toggle navigation" aria-expanded="false">
+            <span class="bars" aria-hidden="true">
+                <span></span>
+                <span></span>
+                <span></span>
+            </span>
+        </button>
+        <span class="mobile-topbar-title" id="mobile-topbar-title">SK Tech Guide</span>
+    </header>
+
+    <!-- Backdrop shown when drawer is open on mobile -->
+    <div class="drawer-backdrop" id="drawer-backdrop"></div>
+
     <div class="app">
         <!-- Sidebar  -->
-        <div class="sidebar">
+        <div class="sidebar" id="sidebar">
             <div class="sidebar-header">
                 <h1>📚 Documentation</h1>
                 <p>SK Tech Guide</p>
@@ -700,7 +828,29 @@
                 item.addEventListener('click', async function() {
                     const fileName = this.dataset.file;
                     await loadMarkdownFile(fileName);
+                    // On mobile, close the drawer after selecting an item
+                    if (window.matchMedia('(max-width: 768px)').matches) {
+                        closeDrawer();
+                    }
                 });
+            });
+
+            // Mobile drawer toggle
+            const toggleBtn = document.getElementById('menu-toggle');
+            const backdrop = document.getElementById('drawer-backdrop');
+            if (toggleBtn) toggleBtn.addEventListener('click', toggleDrawer);
+            if (backdrop) backdrop.addEventListener('click', closeDrawer);
+
+            // Close drawer on Escape
+            document.addEventListener('keydown', function (e) {
+                if (e.key === 'Escape') closeDrawer();
+            });
+
+            // Close drawer if resizing up to desktop width
+            window.addEventListener('resize', function () {
+                if (!window.matchMedia('(max-width: 768px)').matches) {
+                    closeDrawer();
+                }
             });
 
             // Scroll to top visibility
@@ -712,6 +862,19 @@
                     scrollBtn.style.display = 'none';
                 }
             });
+        }
+
+        function toggleDrawer() {
+            const isOpen = document.body.classList.toggle('drawer-open');
+            const toggleBtn = document.getElementById('menu-toggle');
+            if (toggleBtn) toggleBtn.setAttribute('aria-expanded', String(isOpen));
+        }
+
+        function closeDrawer() {
+            if (!document.body.classList.contains('drawer-open')) return;
+            document.body.classList.remove('drawer-open');
+            const toggleBtn = document.getElementById('menu-toggle');
+            if (toggleBtn) toggleBtn.setAttribute('aria-expanded', 'false');
         }
 
         // Load markdown file dynamically
@@ -727,6 +890,8 @@
                 const config = DOCS_CONFIG[fileName];
                 document.getElementById('doc-title').textContent = config.title;
                 document.getElementById('doc-subtitle').textContent = config.subtitle;
+                const mobileTitle = document.getElementById('mobile-topbar-title');
+                if (mobileTitle) mobileTitle.textContent = config.title;
 
                 // Show loading
                 const contentDiv = document.getElementById('markdown-content');
