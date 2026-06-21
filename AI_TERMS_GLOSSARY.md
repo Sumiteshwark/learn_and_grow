@@ -17,12 +17,12 @@ A practical glossary for an engineer, not a researcher. Every term has a one-lin
 4. [Controlling the output (the dials)](#4-controlling-the-output-the-dials)
 5. [Prompting techniques](#5-prompting-techniques)
 6. [Getting reliable, usable output](#6-getting-reliable-usable-output)
-7. [Memory & retrieval (embeddings, RAG)](#7-memory--retrieval-embeddings-rag)
-8. [Agents & orchestration 🆕](#8-agents--orchestration-)
-9. [Reasoning & the frontier 🆕](#9-reasoning--the-frontier-)
-10. [Cost, speed & ops](#10-cost-speed--ops)
-11. [Quality, evaluation & risk](#11-quality-evaluation--risk)
-12. [Buzzwords you'll hear in meetings 🆕](#12-buzzwords-youll-hear-in-meetings-)
+7. [Memory & retrieval (embeddings, RAG)](#7-memory-retrieval-embeddings-rag)
+8. [Agents & orchestration](#8-agents-orchestration)
+9. [Reasoning & the frontier](#9-reasoning-the-frontier)
+10. [Cost, speed & ops](#10-cost-speed-ops)
+11. [Quality, evaluation & risk](#11-quality-evaluation-risk)
+12. [Buzzwords you'll hear in meetings](#12-buzzwords-youll-hear-in-meetings)
 13. [Acronym cheat-sheet](#13-acronym-cheat-sheet)
 
 ---
@@ -153,7 +153,7 @@ A practical glossary for an engineer, not a researcher. Every term has a one-lin
 
 ---
 
-## 8. Agents & orchestration 🆕
+## 8. Agents & orchestration
 
 **Agent** — an LLM running in a loop that can plan, call tools, read the results, and keep going until a goal is met — not just answer once. *Example: "fix this failing test" → the agent reads the error, edits code, reruns, repeats.*
 
@@ -179,7 +179,7 @@ A practical glossary for an engineer, not a researcher. Every term has a one-lin
 
 ---
 
-## 9. Reasoning & the frontier 🆕
+## 9. Reasoning & the frontier
 
 **Reasoning model** — a model trained to produce a long internal chain-of-thought before answering, trading speed for much better performance on hard problems. *Example: OpenAI's "o" series, Claude's extended-thinking mode; great for math/logic/planning, overkill for "rewrite this sentence."*
 
@@ -241,7 +241,7 @@ A practical glossary for an engineer, not a researcher. Every term has a one-lin
 
 ---
 
-## 12. Buzzwords you'll hear in meetings 🆕
+## 12. Buzzwords you'll hear in meetings
 
 **AI engineering** — the discipline of *building products* on top of existing models (prompting, RAG, agents, evals, cost/latency) as opposed to *training* models. *Example: everything the Covlant team does with the Orchestrator.*
 
