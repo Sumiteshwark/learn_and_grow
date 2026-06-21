@@ -1,8 +1,13 @@
-# Repo Layout, Runtime Topology & Language — A Mental Model
+**Last Updated:** March 2026 
+**Author:** SUMITESHWAR KUMAR
+
+---
+
+# 🏗️ Repo Layout, Runtime Topology & Language — A Mental Model
 
 Three terms people constantly conflate: **monorepo/polyrepo**, **monolith/microservices**, and **single-language/polyglot**. They answer three *different* questions and don't constrain each other. This guide separates them, then maps Covlant onto all three.
 
-## Contents
+## Table of Contents
 
 1. [Three independent axes](#1-three-independent-axes) — the one idea this whole doc rests on
 2. [Building blocks: repo, package, project](#2-building-blocks-repo-package-project) — the core vocabulary

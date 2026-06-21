@@ -1,23 +1,29 @@
-# AI / LLM terms you should actually know
+**Last Updated:** March 2026 
+**Author:** SUMITESHWAR KUMAR
+
+---
+
+# 🤖 AI / LLM terms you should actually know
 
 A practical glossary for an engineer, not a researcher. Every term has a one-line plain definition and a concrete example. Where it helps, examples tie back to things you've already seen in the Orchestrator (`makeStructuredOutputCall`, `GenerateEmbeddings`, `SubmitToolResult`).
 
 > **How to read this:** skim the headings, read the bold terms. The first three sections are the true fundamentals; everything after builds on them. Terms marked 🆕 are recent (2024–2026) but already everyday vocabulary.
 
-**Contents**
-1. The absolute basics
-2. Under the hood (how a model is built)
-3. How models are trained and shrunk
-4. Controlling the output (the dials)
-5. Prompting techniques
-6. Getting reliable, usable output
-7. Memory & retrieval (embeddings, RAG)
-8. Agents & orchestration 🆕
-9. Reasoning & the frontier 🆕
-10. Cost, speed & ops
-11. Quality, evaluation & risk
-12. Buzzwords you'll hear in meetings 🆕
-13. Acronym cheat-sheet
+## Table of Contents
+
+1. [The absolute basics](#1-the-absolute-basics)
+2. [Under the hood (how a model is built)](#2-under-the-hood-how-a-model-is-built)
+3. [How models are trained and shrunk](#3-how-models-are-trained-and-shrunk)
+4. [Controlling the output (the dials)](#4-controlling-the-output-the-dials)
+5. [Prompting techniques](#5-prompting-techniques)
+6. [Getting reliable, usable output](#6-getting-reliable-usable-output)
+7. [Memory & retrieval (embeddings, RAG)](#7-memory--retrieval-embeddings-rag)
+8. [Agents & orchestration 🆕](#8-agents--orchestration-)
+9. [Reasoning & the frontier 🆕](#9-reasoning--the-frontier-)
+10. [Cost, speed & ops](#10-cost-speed--ops)
+11. [Quality, evaluation & risk](#11-quality-evaluation--risk)
+12. [Buzzwords you'll hear in meetings 🆕](#12-buzzwords-youll-hear-in-meetings-)
+13. [Acronym cheat-sheet](#13-acronym-cheat-sheet)
 
 ---
 

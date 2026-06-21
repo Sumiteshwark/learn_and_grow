@@ -1,6 +1,34 @@
-# Income Tax & Investment — Complete Reference Guide (India)
+**Last Updated:** March 2026 
+**Author:** SUMITESHWAR KUMAR
+
+---
+
+# 💰 Income Tax & Investment — Complete Reference Guide (India)
 
 > A general glossary covering ITR filing **and** investment taxation. Figures reflect **FY 2025‑26 / AY 2026‑27** unless noted. Rules change with each Union Budget — always re-confirm for the relevant year.
+
+---
+
+## Table of Contents
+
+1. [Foundational Terms](#1-foundational-terms)
+2. [The Five Heads of Income](#2-the-five-heads-of-income)
+3. [Tax Regimes](#3-tax-regimes)
+4. [Core Computation Terms](#4-core-computation-terms)
+5. [Documents & Statements](#5-documents--statements)
+6. [Tax Payment & Credit Terms](#6-tax-payment--credit-terms)
+7. [Interest & Penalties](#7-interest--penalties)
+8. [Types of Returns (by timing)](#8-types-of-returns-by-timing)
+9. [Presumptive Taxation (declare a fixed % as income, no books needed)](#9-presumptive-taxation-declare-a-fixed--as-income-no-books-needed)
+10. [Capital Gains — Key Terms](#10-capital-gains--key-terms)
+11. [Investment Taxation — Quick Reference](#11-investment-taxation--quick-reference)
+12. [Loss Set-off, Clubbing & Other Concepts](#12-loss-set-off-clubbing--other-concepts)
+13. [Assessment, Notices & Audit](#13-assessment-notices--audit)
+14. [Common ITR Schedules](#14-common-itr-schedules)
+15. [Which ITR Form Should You File?](#15-which-itr-form-should-you-file)
+16. [Important Due Dates (AY 2026-27)](#16-important-due-dates-ay-2026-27)
+17. [Common Chapter VI-A Deductions (Old Regime mainly)](#17-common-chapter-vi-a-deductions-old-regime-mainly)
+18. [General Filing Steps](#18-general-filing-steps)
 
 ---
 
